@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "Tap-O-Matic-rescue")(type "KiCad")(uri "${KIPRJMOD}/Tap-O-Matic-rescue.kicad_sym")(options "")(descr ""))
+)

@@ -1,0 +1,12 @@
+"Id";"Designator";"Footprint";"Quantity";"Designation";"Supplier and ref";
+1;"R6,R7,R1,R9,R8,R5,R4,R3,R2";"PTL45";9;"10K";;;
+2;"RV7,RV14,RV13,RV12,RV11,RV10,RV9,RV8,RV6";"SongHuei_tall_trimmer";9;"10K";;;
+3;"SW2,SW1";"SALECOM_ES4-2_SPDT";2;"SW_SPDT";;;
+4;"U1";"DaisySubmodule";1;"DaisySubmodule";;;
+5;"RSPREAD1,RLPF1,RHPF1,RFB1,RTIME1";"Potentiometer_Alpha_RD901F-40-00D_Single_Vertical";5;"10K";;;
+6;"C5,C4,C3,C2,C1";"C_Disc_D3.8mm_W2.6mm_P2.50mm";5;"100n";;;
+7;"J16";"PinHeader_2x05_P2.54mm_Vertical";1;"Conn_02x05_Odd_Even";;;
+8;"U5";"DIP-16_W7.62mm_Socket";1;"DG408";;;
+9;"U4,U3,U2";"DIP-16_W7.62mm_Socket";3;"4051";;;
+10;"R18,R17,R16,R15,R14,R13,R12,R11,R10";"R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal";9;"1K";;;
+11;"OUT_R1,OUT_L1,IN_R1,IN_L1,LPF1,HPF1,FB1,TIME1,SPREAD1,CLOCK1,J9,J8,J7,J6,J5,J4,J3,J2,J1";"thonkiconn_fuzzySi";19;"fuzzySI_thonkiconn";;;
