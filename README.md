@@ -1,4 +1,4 @@
-# Tap-O-Matic
+# Tap-O-Matic DDV
 
 The Olivia Arts Modular Time Machine, version by Harry Richardson, modified by Blue Nautilus and the DivKid Discord. 
 
