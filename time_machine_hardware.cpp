@@ -1,121 +1,120 @@
 #include "time_machine_hardware.h"
 #include <vector>
 
+using namespace daisy;
 namespace oam
 {
 namespace time_machine
 {
     /** Const definitions */
-    static constexpr dsy_gpio_pin DUMMYPIN        = {DSY_GPIOX, 0};
-    static constexpr dsy_gpio_pin PIN_ADC_CTRL_1  = {DSY_GPIOA, 3};
-    static constexpr dsy_gpio_pin PIN_ADC_CTRL_2  = {DSY_GPIOA, 6};
-    static constexpr dsy_gpio_pin PIN_ADC_CTRL_3  = {DSY_GPIOA, 2};
-    static constexpr dsy_gpio_pin PIN_ADC_CTRL_4  = {DSY_GPIOA, 7};
-    static constexpr dsy_gpio_pin PIN_ADC_CTRL_5  = {DSY_GPIOB, 1};
-    static constexpr dsy_gpio_pin PIN_ADC_CTRL_6  = {DSY_GPIOC, 4};
-    static constexpr dsy_gpio_pin PIN_ADC_CTRL_7  = {DSY_GPIOC, 0};
-    static constexpr dsy_gpio_pin PIN_ADC_CTRL_8  = {DSY_GPIOC, 1};
-    static constexpr dsy_gpio_pin PIN_ADC_CTRL_9  = {DSY_GPIOA, 1};
-    static constexpr dsy_gpio_pin PIN_ADC_CTRL_10 = {DSY_GPIOA, 0};
-    static constexpr dsy_gpio_pin PIN_ADC_CTRL_11 = {DSY_GPIOC, 2};
-    static constexpr dsy_gpio_pin PIN_ADC_CTRL_12 = {DSY_GPIOC, 3};
-    static constexpr dsy_gpio_pin PIN_USER_LED    = {DSY_GPIOC, 7};
+    static constexpr Pin DUMMYPIN        = Pin(PORTX, 0);
+    static constexpr Pin PIN_ADC_CTRL_1  = TimeMachineHardware::C5;
+    static constexpr Pin PIN_ADC_CTRL_2  = TimeMachineHardware::C4;
+    static constexpr Pin PIN_ADC_CTRL_3  = TimeMachineHardware::C3;
+    static constexpr Pin PIN_ADC_CTRL_4  = TimeMachineHardware::C2;
+    static constexpr Pin PIN_ADC_CTRL_5  = TimeMachineHardware::C6;
+    static constexpr Pin PIN_ADC_CTRL_6  = TimeMachineHardware::C7;
+    static constexpr Pin PIN_ADC_CTRL_7  = TimeMachineHardware::C8;
+    static constexpr Pin PIN_ADC_CTRL_8  = TimeMachineHardware::C9;
+    static constexpr Pin PIN_ADC_CTRL_9  = TimeMachineHardware::A2;
+    static constexpr Pin PIN_ADC_CTRL_10 = TimeMachineHardware::A3;
+    static constexpr Pin PIN_ADC_CTRL_11 = TimeMachineHardware::D9;
+    static constexpr Pin PIN_ADC_CTRL_12 = TimeMachineHardware::D8;
+    static constexpr Pin PIN_USER_LED    = Pin(PORTC, 7);
 
-    const dsy_gpio_pin kPinMap[4][10] = {
-        /** Header Bank A */
-        {
-            DUMMYPIN,        /**< A1  - -12V Power Input */
-            {DSY_GPIOA, 1},  /**< A2  - UART1 Rx */
-            {DSY_GPIOA, 0},  /**< A3  - UART1 Tx */
-            DUMMYPIN,        /**< A4  - GND */
-            DUMMYPIN,        /**< A5  - +12V Power Input */
-            DUMMYPIN,        /**< A6  - +5V Power Output */
-            DUMMYPIN,        /**< A7  - GND */
-            {DSY_GPIOB, 14}, /**< A8  - USB DM */
-            {DSY_GPIOB, 15}, /**< A9  - USB DP */
-            DUMMYPIN,        /**< A10 - +3V3 Power Output */
-        },
-        /** Header Bank B */
-        {
-            DUMMYPIN,        /**< B1  - Audio Out Right */
-            DUMMYPIN,        /**< B2  - Audio Out Left*/
-            DUMMYPIN,        /**< B3  - Audio In Right */
-            DUMMYPIN,        /**< B4  - Audio In Left */
-            {DSY_GPIOC, 13}, /**< B5  - GATE OUT 1 */
-            {DSY_GPIOC, 14}, /**< B6  - GATE OUT 2 */
-            {DSY_GPIOB, 8},  /**< B7  - I2C1 SCL */
-            {DSY_GPIOB, 9},  /**< B8  - I2C1 SDA */
-            {DSY_GPIOG, 14}, /**< B9  - GATE IN 2 */
-            {DSY_GPIOG, 13}, /**< B10 - GATE IN 1 */
-        },
-        /** Header Bank C */
-        {
-            {DSY_GPIOA, 5}, /**< C1  - CV Out 2 */
-            PIN_ADC_CTRL_4, /**< C2  - CV In 4 */
-            PIN_ADC_CTRL_3, /**< C3  - CV In 3 */
-            PIN_ADC_CTRL_2, /**< C4  - CV In 2 */
-            PIN_ADC_CTRL_1, /**< C5  - CV In 1 */
-            PIN_ADC_CTRL_5, /**< C6  - CV In 5 */
-            PIN_ADC_CTRL_6, /**< C7  - CV In 6 */
-            PIN_ADC_CTRL_7, /**< C8  - CV In 7 */
-            PIN_ADC_CTRL_8, /**< C9  - CV In 8 */
-            {DSY_GPIOA, 4}, /**< C10 - CV Out 1 */
-        },
-        /** Header Bank D */
-        {
-            {DSY_GPIOB, 4},  /**< D1  - SPI2 CS */
-            {DSY_GPIOC, 11}, /**< D2  - SDMMC D3 */
-            {DSY_GPIOC, 10}, /**< D3  - SDMMC D2*/
-            {DSY_GPIOC, 9},  /**< D4  - SDMMC D1*/
-            {DSY_GPIOC, 8},  /**< D5  - SDMMC D0 */
-            {DSY_GPIOC, 12}, /**< D6  - SDMMC CK */
-            {DSY_GPIOD, 2},  /**< D7  - SDMMC CMD */
-            {DSY_GPIOC, 2},  /**< D8  - SPI2 MISO */
-            {DSY_GPIOC, 3},  /**< D9  - SPI2 MOSI */
-            {DSY_GPIOD, 3},  /**< D10 - SPI2 SCK  */
-        },
-    };
+    constexpr Pin kPinMap[4][10] =
+    // Bank A
+    {{TimeMachineHardware::A1,
+      TimeMachineHardware::A2,
+      TimeMachineHardware::A3,
+      TimeMachineHardware::A4,
+      TimeMachineHardware::A5,
+      TimeMachineHardware::A6,
+      TimeMachineHardware::A7,
+      TimeMachineHardware::A8,
+      TimeMachineHardware::A9,
+      TimeMachineHardware::A10},
 
-    const dsy_gpio_pin TimeMachineHardware::A1  = kPinMap[0][0];
-    const dsy_gpio_pin TimeMachineHardware::A2  = kPinMap[0][1];
-    const dsy_gpio_pin TimeMachineHardware::A3  = kPinMap[0][2];
-    const dsy_gpio_pin TimeMachineHardware::A4  = kPinMap[0][3];
-    const dsy_gpio_pin TimeMachineHardware::A5  = kPinMap[0][4];
-    const dsy_gpio_pin TimeMachineHardware::A6  = kPinMap[0][5];
-    const dsy_gpio_pin TimeMachineHardware::A7  = kPinMap[0][6];
-    const dsy_gpio_pin TimeMachineHardware::A8  = kPinMap[0][7];
-    const dsy_gpio_pin TimeMachineHardware::A9  = kPinMap[0][8];
-    const dsy_gpio_pin TimeMachineHardware::A10 = kPinMap[0][9];
-    const dsy_gpio_pin TimeMachineHardware::B1  = kPinMap[1][0];
-    const dsy_gpio_pin TimeMachineHardware::B2  = kPinMap[1][1];
-    const dsy_gpio_pin TimeMachineHardware::B3  = kPinMap[1][2];
-    const dsy_gpio_pin TimeMachineHardware::B4  = kPinMap[1][3];
-    const dsy_gpio_pin TimeMachineHardware::B5  = kPinMap[1][4];
-    const dsy_gpio_pin TimeMachineHardware::B6  = kPinMap[1][5];
-    const dsy_gpio_pin TimeMachineHardware::B7  = kPinMap[1][6];
-    const dsy_gpio_pin TimeMachineHardware::B8  = kPinMap[1][7];
-    const dsy_gpio_pin TimeMachineHardware::B9  = kPinMap[1][8];
-    const dsy_gpio_pin TimeMachineHardware::B10 = kPinMap[1][9];
-    const dsy_gpio_pin TimeMachineHardware::C1  = kPinMap[2][0];
-    const dsy_gpio_pin TimeMachineHardware::C2  = kPinMap[2][1];
-    const dsy_gpio_pin TimeMachineHardware::C3  = kPinMap[2][2];
-    const dsy_gpio_pin TimeMachineHardware::C4  = kPinMap[2][3];
-    const dsy_gpio_pin TimeMachineHardware::C5  = kPinMap[2][4];
-    const dsy_gpio_pin TimeMachineHardware::C6  = kPinMap[2][5];
-    const dsy_gpio_pin TimeMachineHardware::C7  = kPinMap[2][6];
-    const dsy_gpio_pin TimeMachineHardware::C8  = kPinMap[2][7];
-    const dsy_gpio_pin TimeMachineHardware::C9  = kPinMap[2][8];
-    const dsy_gpio_pin TimeMachineHardware::C10 = kPinMap[2][9];
-    const dsy_gpio_pin TimeMachineHardware::D1  = kPinMap[3][0];
-    const dsy_gpio_pin TimeMachineHardware::D2  = kPinMap[3][1];
-    const dsy_gpio_pin TimeMachineHardware::D3  = kPinMap[3][2];
-    const dsy_gpio_pin TimeMachineHardware::D4  = kPinMap[3][3];
-    const dsy_gpio_pin TimeMachineHardware::D5  = kPinMap[3][4];
-    const dsy_gpio_pin TimeMachineHardware::D6  = kPinMap[3][5];
-    const dsy_gpio_pin TimeMachineHardware::D7  = kPinMap[3][6];
-    const dsy_gpio_pin TimeMachineHardware::D8  = kPinMap[3][7];
-    const dsy_gpio_pin TimeMachineHardware::D9  = kPinMap[3][8];
-    const dsy_gpio_pin TimeMachineHardware::D10 = kPinMap[3][9];
+     // Bank B
+     {TimeMachineHardware::B1,
+      TimeMachineHardware::B2,
+      TimeMachineHardware::B3,
+      TimeMachineHardware::B4,
+      TimeMachineHardware::B5,
+      TimeMachineHardware::B6,
+      TimeMachineHardware::B7,
+      TimeMachineHardware::B8,
+      TimeMachineHardware::B9,
+      TimeMachineHardware::B10},
+
+     // Bank C
+     {TimeMachineHardware::C1,
+      TimeMachineHardware::C2,
+      TimeMachineHardware::C3,
+      TimeMachineHardware::C4,
+      TimeMachineHardware::C5,
+      TimeMachineHardware::C6,
+      TimeMachineHardware::C7,
+      TimeMachineHardware::C8,
+      TimeMachineHardware::C9,
+      TimeMachineHardware::C10},
+
+     // Bank D
+     {TimeMachineHardware::D1,
+      TimeMachineHardware::D2,
+      TimeMachineHardware::D3,
+      TimeMachineHardware::D4,
+      TimeMachineHardware::D5,
+      TimeMachineHardware::D6,
+      TimeMachineHardware::D7,
+      TimeMachineHardware::D8,
+      TimeMachineHardware::D9,
+      TimeMachineHardware::D10}};
+
+ 
+      constexpr Pin TimeMachineHardware::A1;
+      constexpr Pin TimeMachineHardware::A2;
+      constexpr Pin TimeMachineHardware::A3;
+      constexpr Pin TimeMachineHardware::A4;
+      constexpr Pin TimeMachineHardware::A5;
+      constexpr Pin TimeMachineHardware::A6;
+      constexpr Pin TimeMachineHardware::A7;
+      constexpr Pin TimeMachineHardware::A8;
+      constexpr Pin TimeMachineHardware::A9;
+      constexpr Pin TimeMachineHardware::A10;
+  
+      constexpr Pin TimeMachineHardware::B1;
+      constexpr Pin TimeMachineHardware::B2;
+      constexpr Pin TimeMachineHardware::B3;
+      constexpr Pin TimeMachineHardware::B4;
+      constexpr Pin TimeMachineHardware::B5;
+      constexpr Pin TimeMachineHardware::B6;
+      constexpr Pin TimeMachineHardware::B7;
+      constexpr Pin TimeMachineHardware::B8;
+      constexpr Pin TimeMachineHardware::B9;
+      constexpr Pin TimeMachineHardware::B10;
+  
+      constexpr Pin TimeMachineHardware::C1;
+      constexpr Pin TimeMachineHardware::C2;
+      constexpr Pin TimeMachineHardware::C3;
+      constexpr Pin TimeMachineHardware::C4;
+      constexpr Pin TimeMachineHardware::C5;
+      constexpr Pin TimeMachineHardware::C6;
+      constexpr Pin TimeMachineHardware::C7;
+      constexpr Pin TimeMachineHardware::C8;
+      constexpr Pin TimeMachineHardware::C9;
+      constexpr Pin TimeMachineHardware::C10;
+  
+      constexpr Pin TimeMachineHardware::D1;
+      constexpr Pin TimeMachineHardware::D2;
+      constexpr Pin TimeMachineHardware::D3;
+      constexpr Pin TimeMachineHardware::D4;
+      constexpr Pin TimeMachineHardware::D5;
+      constexpr Pin TimeMachineHardware::D6;
+      constexpr Pin TimeMachineHardware::D7;
+      constexpr Pin TimeMachineHardware::D8;
+      constexpr Pin TimeMachineHardware::D9;
+      constexpr Pin TimeMachineHardware::D10;
 
     /** outside of class static buffer(s) for DMA access */
     uint16_t DMA_BUFFER_MEM_SECTION dsy_patch_sm_dac_buffer[2][48];
@@ -250,12 +249,12 @@ namespace time_machine
             QSPIHandle::Config qspi_config;
             qspi_config.device = QSPIHandle::Config::Device::IS25LP064A;
             qspi_config.mode   = QSPIHandle::Config::Mode::MEMORY_MAPPED;
-            qspi_config.pin_config.io0 = {DSY_GPIOF, 8};
-            qspi_config.pin_config.io1 = {DSY_GPIOF, 9};
-            qspi_config.pin_config.io2 = {DSY_GPIOF, 7};
-            qspi_config.pin_config.io3 = {DSY_GPIOF, 6};
-            qspi_config.pin_config.clk = {DSY_GPIOF, 10};
-            qspi_config.pin_config.ncs = {DSY_GPIOG, 6};
+            qspi_config.pin_config.io0 = Pin(PORTF,8);
+            qspi_config.pin_config.io1 = Pin(PORTF, 9);
+            qspi_config.pin_config.io2 = Pin(PORTF, 7);
+            qspi_config.pin_config.io3 = Pin(PORTF, 6);
+            qspi_config.pin_config.clk = Pin(PORTF, 10);
+            qspi_config.pin_config.ncs = Pin(PORTF, 6);
             qspi.Init(qspi_config);
         }
 
@@ -270,11 +269,11 @@ namespace time_machine
         sai_config.b_sync          = SaiHandle::Config::Sync::SLAVE;
         sai_config.a_dir           = SaiHandle::Config::Direction::RECEIVE;
         sai_config.b_dir           = SaiHandle::Config::Direction::TRANSMIT;
-        sai_config.pin_config.fs   = {DSY_GPIOE, 4};
-        sai_config.pin_config.mclk = {DSY_GPIOE, 2};
-        sai_config.pin_config.sck  = {DSY_GPIOE, 5};
-        sai_config.pin_config.sa   = {DSY_GPIOE, 6};
-        sai_config.pin_config.sb   = {DSY_GPIOE, 3};
+        sai_config.pin_config.fs   = {PORTE, 4};
+        sai_config.pin_config.mclk = {PORTE, 2};
+        sai_config.pin_config.sck  = {PORTE, 5};
+        sai_config.pin_config.sa   = {PORTE, 6};
+        sai_config.pin_config.sb   = {PORTE, 3};
         SaiHandle sai_1_handle;
         sai_1_handle.Init(sai_config);
 
@@ -282,8 +281,8 @@ namespace time_machine
         i2c_cfg.periph         = I2CHandle::Config::Peripheral::I2C_2;
         i2c_cfg.mode           = I2CHandle::Config::Mode::I2C_MASTER;
         i2c_cfg.speed          = I2CHandle::Config::Speed::I2C_400KHZ;
-        i2c_cfg.pin_config.scl = {DSY_GPIOB, 10};
-        i2c_cfg.pin_config.sda = {DSY_GPIOB, 11};
+        i2c_cfg.pin_config.scl = {PORTB, 10};
+        i2c_cfg.pin_config.sda = {PORTB, 11};
         I2CHandle i2c2;
         i2c2.Init(i2c_cfg);
         codec.Init(i2c2);
@@ -299,7 +298,7 @@ namespace time_machine
         AdcChannelConfig adc_config[ADC_LAST + 7];
 
         /** Order of pins to match enum expectations */
-        dsy_gpio_pin adc_pins[] = {
+        Pin adc_pins[] = {
             PIN_ADC_CTRL_1,
             PIN_ADC_CTRL_2,
             PIN_ADC_CTRL_3,
@@ -368,13 +367,9 @@ namespace time_machine
         }
 
         /** Fixed-function Digital I/O */
-        user_led.mode = DSY_GPIO_MODE_OUTPUT_PP;
-        user_led.pull = DSY_GPIO_NOPULL;
-        user_led.pin  = PIN_USER_LED;
-
-        dsy_gpio_init(&user_led);
-        gate_in_1.Init((dsy_gpio_pin *)&B10);
-        gate_in_2.Init((dsy_gpio_pin *)&B9);
+        user_led.Init(PIN_USER_LED, GPIO::Mode::OUTPUT);
+        gate_in_1.Init(B10);
+        gate_in_2.Init(B9);
 
         /** DAC init */
         pimpl_->InitDac();
@@ -551,7 +546,7 @@ namespace time_machine
         return adc.GetMuxFloat(MISC_MUX, 5);
     }
 
-    dsy_gpio_pin TimeMachineHardware::GetPin(const PinBank bank, const int idx)
+    Pin TimeMachineHardware::GetPin(const PinBank bank, const int idx)
     {
         if(idx <= 0 || idx > 10)
         {
@@ -575,7 +570,7 @@ namespace time_machine
         pimpl_->WriteCvOut(channel, voltage);
     }
 
-    void TimeMachineHardware::SetLed(bool state) { dsy_gpio_write(&user_led, state); }
+    void TimeMachineHardware::SetLed(bool state) { user_led.Write(state); }
 
     bool TimeMachineHardware::ValidateSDRAM()
     {

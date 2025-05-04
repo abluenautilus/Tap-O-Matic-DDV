@@ -381,6 +381,8 @@ void calibrate(CvCalibrationData &saved, int ledSeqDelay)
 
 void logState()
 {
+	// hw.PrintLine("Loudness IN L:" FLT_FMT(6),FLT_VAR(6,timeMachine.timeMachineLeft.readHeads[i - 1].loudness.Get()));
+	// hw.PrintLine("Loudness IN R:" FLT_FMT(6),FLT_VAR(6,timeMachine.timeMachineRight.readHeads[i - 1].loudness.Get()));
 	hw.PrintLine("CPU AVG: " FLT_FMT(6), FLT_VAR(6, cpuMeter.GetAvgCpuLoad()));
 	hw.PrintLine("CPU MIN: " FLT_FMT(6), FLT_VAR(6, cpuMeter.GetMinCpuLoad()));
 	hw.PrintLine("CPU MAX: " FLT_FMT(6), FLT_VAR(6, cpuMeter.GetMaxCpuLoad()));
@@ -418,14 +420,18 @@ int main(void)
 {
 	// init time machine hardware
     hw.Init();
-	hw.StartLog();
+	hw.StartLog(false);
+
+	hw.PrintLine("Init Clock");
 
 	hw.SetAudioBlockSize(7); // number of samples handled per callback
 
-	dsy_gpio_pin gatePin = CLOCK;
-	gate.Init(&gatePin);
+	hw.PrintLine("Init Clock");
+	Pin gatePin = CLOCK;
+	gate.Init(gatePin);
 
 	// initialize LEDs
+	hw.PrintLine("Init LEDs");
 	leds[0].Init(LED_DRY, false);
 	leds[1].Init(LED_1, false);
 	leds[2].Init(LED_2, false);
