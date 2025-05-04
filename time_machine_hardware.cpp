@@ -1,120 +1,121 @@
 #include "time_machine_hardware.h"
 #include <vector>
 
-using namespace daisy;
 namespace oam
 {
 namespace time_machine
 {
     /** Const definitions */
     static constexpr Pin DUMMYPIN        = Pin(PORTX, 0);
-    static constexpr Pin PIN_ADC_CTRL_1  = TimeMachineHardware::C5;
-    static constexpr Pin PIN_ADC_CTRL_2  = TimeMachineHardware::C4;
-    static constexpr Pin PIN_ADC_CTRL_3  = TimeMachineHardware::C3;
-    static constexpr Pin PIN_ADC_CTRL_4  = TimeMachineHardware::C2;
-    static constexpr Pin PIN_ADC_CTRL_5  = TimeMachineHardware::C6;
-    static constexpr Pin PIN_ADC_CTRL_6  = TimeMachineHardware::C7;
-    static constexpr Pin PIN_ADC_CTRL_7  = TimeMachineHardware::C8;
-    static constexpr Pin PIN_ADC_CTRL_8  = TimeMachineHardware::C9;
-    static constexpr Pin PIN_ADC_CTRL_9  = TimeMachineHardware::A2;
-    static constexpr Pin PIN_ADC_CTRL_10 = TimeMachineHardware::A3;
-    static constexpr Pin PIN_ADC_CTRL_11 = TimeMachineHardware::D9;
-    static constexpr Pin PIN_ADC_CTRL_12 = TimeMachineHardware::D8;
+    static constexpr Pin PIN_ADC_CTRL_1  = Pin(PORTA, 3);
+    static constexpr Pin PIN_ADC_CTRL_2  = Pin(PORTA, 6);
+    static constexpr Pin PIN_ADC_CTRL_3  = Pin(PORTA, 2);
+    static constexpr Pin PIN_ADC_CTRL_4  = Pin(PORTA, 7);
+    static constexpr Pin PIN_ADC_CTRL_5  = Pin(PORTB, 1);
+    static constexpr Pin PIN_ADC_CTRL_6  = Pin(PORTC, 4);
+    static constexpr Pin PIN_ADC_CTRL_7  = Pin(PORTC, 0);
+    static constexpr Pin PIN_ADC_CTRL_8  = Pin(PORTC, 1);
+    static constexpr Pin PIN_ADC_CTRL_9  = Pin(PORTA, 1);
+    static constexpr Pin PIN_ADC_CTRL_10 = Pin(PORTA, 0);
+    static constexpr Pin PIN_ADC_CTRL_11 = Pin(PORTC, 2);
+    static constexpr Pin PIN_ADC_CTRL_12 = Pin(PORTC, 3);
     static constexpr Pin PIN_USER_LED    = Pin(PORTC, 7);
 
-    constexpr Pin kPinMap[4][10] =
-    // Bank A
-    {{TimeMachineHardware::A1,
-      TimeMachineHardware::A2,
-      TimeMachineHardware::A3,
-      TimeMachineHardware::A4,
-      TimeMachineHardware::A5,
-      TimeMachineHardware::A6,
-      TimeMachineHardware::A7,
-      TimeMachineHardware::A8,
-      TimeMachineHardware::A9,
-      TimeMachineHardware::A10},
+    const Pin kPinMap[4][10] = {
+        /** Header Bank A */
+        {
+            DUMMYPIN,        /**< A1  - -12V Power Input */
+            {PORTA, 1},  /**< A2  - UART1 Rx */
+            {PORTA, 0},  /**< A3  - UART1 Tx */
+            DUMMYPIN,        /**< A4  - GND */
+            DUMMYPIN,        /**< A5  - +12V Power Input */
+            DUMMYPIN,        /**< A6  - +5V Power Output */
+            DUMMYPIN,        /**< A7  - GND */
+            {PORTB, 14}, /**< A8  - USB DM */
+            {PORTB, 15}, /**< A9  - USB DP */
+            DUMMYPIN,        /**< A10 - +3V3 Power Output */
+        },
+        /** Header Bank B */
+        {
+            DUMMYPIN,        /**< B1  - Audio Out Right */
+            DUMMYPIN,        /**< B2  - Audio Out Left*/
+            DUMMYPIN,        /**< B3  - Audio In Right */
+            DUMMYPIN,        /**< B4  - Audio In Left */
+            {PORTC, 13}, /**< B5  - GATE OUT 1 */
+            {PORTC, 14}, /**< B6  - GATE OUT 2 */
+            {PORTB, 8},  /**< B7  - I2C1 SCL */
+            {PORTB, 9},  /**< B8  - I2C1 SDA */
+            {PORTG, 14}, /**< B9  - GATE IN 2 */
+            {PORTG, 13}, /**< B10 - GATE IN 1 */
+        },
+        /** Header Bank C */
+        {
+            {PORTA, 5}, /**< C1  - CV Out 2 */
+            PIN_ADC_CTRL_4, /**< C2  - CV In 4 */
+            PIN_ADC_CTRL_3, /**< C3  - CV In 3 */
+            PIN_ADC_CTRL_2, /**< C4  - CV In 2 */
+            PIN_ADC_CTRL_1, /**< C5  - CV In 1 */
+            PIN_ADC_CTRL_5, /**< C6  - CV In 5 */
+            PIN_ADC_CTRL_6, /**< C7  - CV In 6 */
+            PIN_ADC_CTRL_7, /**< C8  - CV In 7 */
+            PIN_ADC_CTRL_8, /**< C9  - CV In 8 */
+            {PORTA, 4}, /**< C10 - CV Out 1 */
+        },
+        /** Header Bank D */
+        {
+            {PORTB, 4},  /**< D1  - SPI2 CS */
+            {PORTC, 11}, /**< D2  - SDMMC D3 */
+            {PORTC, 10}, /**< D3  - SDMMC D2*/
+            {PORTC, 9},  /**< D4  - SDMMC D1*/
+            {PORTC, 8},  /**< D5  - SDMMC D0 */
+            {PORTC, 12}, /**< D6  - SDMMC CK */
+            {PORTD, 2},  /**< D7  - SDMMC CMD */
+            {PORTC, 2},  /**< D8  - SPI2 MISO */
+            {PORTC, 3},  /**< D9  - SPI2 MOSI */
+            {PORTD, 3},  /**< D10 - SPI2 SCK  */
+        },
+    };
 
-     // Bank B
-     {TimeMachineHardware::B1,
-      TimeMachineHardware::B2,
-      TimeMachineHardware::B3,
-      TimeMachineHardware::B4,
-      TimeMachineHardware::B5,
-      TimeMachineHardware::B6,
-      TimeMachineHardware::B7,
-      TimeMachineHardware::B8,
-      TimeMachineHardware::B9,
-      TimeMachineHardware::B10},
-
-     // Bank C
-     {TimeMachineHardware::C1,
-      TimeMachineHardware::C2,
-      TimeMachineHardware::C3,
-      TimeMachineHardware::C4,
-      TimeMachineHardware::C5,
-      TimeMachineHardware::C6,
-      TimeMachineHardware::C7,
-      TimeMachineHardware::C8,
-      TimeMachineHardware::C9,
-      TimeMachineHardware::C10},
-
-     // Bank D
-     {TimeMachineHardware::D1,
-      TimeMachineHardware::D2,
-      TimeMachineHardware::D3,
-      TimeMachineHardware::D4,
-      TimeMachineHardware::D5,
-      TimeMachineHardware::D6,
-      TimeMachineHardware::D7,
-      TimeMachineHardware::D8,
-      TimeMachineHardware::D9,
-      TimeMachineHardware::D10}};
-
- 
-      constexpr Pin TimeMachineHardware::A1;
-      constexpr Pin TimeMachineHardware::A2;
-      constexpr Pin TimeMachineHardware::A3;
-      constexpr Pin TimeMachineHardware::A4;
-      constexpr Pin TimeMachineHardware::A5;
-      constexpr Pin TimeMachineHardware::A6;
-      constexpr Pin TimeMachineHardware::A7;
-      constexpr Pin TimeMachineHardware::A8;
-      constexpr Pin TimeMachineHardware::A9;
-      constexpr Pin TimeMachineHardware::A10;
-  
-      constexpr Pin TimeMachineHardware::B1;
-      constexpr Pin TimeMachineHardware::B2;
-      constexpr Pin TimeMachineHardware::B3;
-      constexpr Pin TimeMachineHardware::B4;
-      constexpr Pin TimeMachineHardware::B5;
-      constexpr Pin TimeMachineHardware::B6;
-      constexpr Pin TimeMachineHardware::B7;
-      constexpr Pin TimeMachineHardware::B8;
-      constexpr Pin TimeMachineHardware::B9;
-      constexpr Pin TimeMachineHardware::B10;
-  
-      constexpr Pin TimeMachineHardware::C1;
-      constexpr Pin TimeMachineHardware::C2;
-      constexpr Pin TimeMachineHardware::C3;
-      constexpr Pin TimeMachineHardware::C4;
-      constexpr Pin TimeMachineHardware::C5;
-      constexpr Pin TimeMachineHardware::C6;
-      constexpr Pin TimeMachineHardware::C7;
-      constexpr Pin TimeMachineHardware::C8;
-      constexpr Pin TimeMachineHardware::C9;
-      constexpr Pin TimeMachineHardware::C10;
-  
-      constexpr Pin TimeMachineHardware::D1;
-      constexpr Pin TimeMachineHardware::D2;
-      constexpr Pin TimeMachineHardware::D3;
-      constexpr Pin TimeMachineHardware::D4;
-      constexpr Pin TimeMachineHardware::D5;
-      constexpr Pin TimeMachineHardware::D6;
-      constexpr Pin TimeMachineHardware::D7;
-      constexpr Pin TimeMachineHardware::D8;
-      constexpr Pin TimeMachineHardware::D9;
-      constexpr Pin TimeMachineHardware::D10;
+    const Pin TimeMachineHardware::A1  = kPinMap[0][0];
+    const Pin TimeMachineHardware::A2  = kPinMap[0][1];
+    const Pin TimeMachineHardware::A3  = kPinMap[0][2];
+    const Pin TimeMachineHardware::A4  = kPinMap[0][3];
+    const Pin TimeMachineHardware::A5  = kPinMap[0][4];
+    const Pin TimeMachineHardware::A6  = kPinMap[0][5];
+    const Pin TimeMachineHardware::A7  = kPinMap[0][6];
+    const Pin TimeMachineHardware::A8  = kPinMap[0][7];
+    const Pin TimeMachineHardware::A9  = kPinMap[0][8];
+    const Pin TimeMachineHardware::A10 = kPinMap[0][9];
+    const Pin TimeMachineHardware::B1  = kPinMap[1][0];
+    const Pin TimeMachineHardware::B2  = kPinMap[1][1];
+    const Pin TimeMachineHardware::B3  = kPinMap[1][2];
+    const Pin TimeMachineHardware::B4  = kPinMap[1][3];
+    const Pin TimeMachineHardware::B5  = kPinMap[1][4];
+    const Pin TimeMachineHardware::B6  = kPinMap[1][5];
+    const Pin TimeMachineHardware::B7  = kPinMap[1][6];
+    const Pin TimeMachineHardware::B8  = kPinMap[1][7];
+    const Pin TimeMachineHardware::B9  = kPinMap[1][8];
+    const Pin TimeMachineHardware::B10 = kPinMap[1][9];
+    const Pin TimeMachineHardware::C1  = kPinMap[2][0];
+    const Pin TimeMachineHardware::C2  = kPinMap[2][1];
+    const Pin TimeMachineHardware::C3  = kPinMap[2][2];
+    const Pin TimeMachineHardware::C4  = kPinMap[2][3];
+    const Pin TimeMachineHardware::C5  = kPinMap[2][4];
+    const Pin TimeMachineHardware::C6  = kPinMap[2][5];
+    const Pin TimeMachineHardware::C7  = kPinMap[2][6];
+    const Pin TimeMachineHardware::C8  = kPinMap[2][7];
+    const Pin TimeMachineHardware::C9  = kPinMap[2][8];
+    const Pin TimeMachineHardware::C10 = kPinMap[2][9];
+    const Pin TimeMachineHardware::D1  = kPinMap[3][0];
+    const Pin TimeMachineHardware::D2  = kPinMap[3][1];
+    const Pin TimeMachineHardware::D3  = kPinMap[3][2];
+    const Pin TimeMachineHardware::D4  = kPinMap[3][3];
+    const Pin TimeMachineHardware::D5  = kPinMap[3][4];
+    const Pin TimeMachineHardware::D6  = kPinMap[3][5];
+    const Pin TimeMachineHardware::D7  = kPinMap[3][6];
+    const Pin TimeMachineHardware::D8  = kPinMap[3][7];
+    const Pin TimeMachineHardware::D9  = kPinMap[3][8];
+    const Pin TimeMachineHardware::D10 = kPinMap[3][9];
 
     /** outside of class static buffer(s) for DMA access */
     uint16_t DMA_BUFFER_MEM_SECTION dsy_patch_sm_dac_buffer[2][48];
@@ -249,12 +250,12 @@ namespace time_machine
             QSPIHandle::Config qspi_config;
             qspi_config.device = QSPIHandle::Config::Device::IS25LP064A;
             qspi_config.mode   = QSPIHandle::Config::Mode::MEMORY_MAPPED;
-            qspi_config.pin_config.io0 = Pin(PORTF,8);
+            qspi_config.pin_config.io0 = Pin(PORTF, 8);
             qspi_config.pin_config.io1 = Pin(PORTF, 9);
             qspi_config.pin_config.io2 = Pin(PORTF, 7);
             qspi_config.pin_config.io3 = Pin(PORTF, 6);
             qspi_config.pin_config.clk = Pin(PORTF, 10);
-            qspi_config.pin_config.ncs = Pin(PORTF, 6);
+            qspi_config.pin_config.ncs = Pin(PORTG, 6);
             qspi.Init(qspi_config);
         }
 
@@ -269,11 +270,11 @@ namespace time_machine
         sai_config.b_sync          = SaiHandle::Config::Sync::SLAVE;
         sai_config.a_dir           = SaiHandle::Config::Direction::RECEIVE;
         sai_config.b_dir           = SaiHandle::Config::Direction::TRANSMIT;
-        sai_config.pin_config.fs   = {PORTE, 4};
-        sai_config.pin_config.mclk = {PORTE, 2};
-        sai_config.pin_config.sck  = {PORTE, 5};
-        sai_config.pin_config.sa   = {PORTE, 6};
-        sai_config.pin_config.sb   = {PORTE, 3};
+        sai_config.pin_config.fs   = Pin(PORTE, 4);
+        sai_config.pin_config.mclk = Pin(PORTE, 2);
+        sai_config.pin_config.sck  = Pin(PORTE, 5);
+        sai_config.pin_config.sa   = Pin(PORTE, 6);
+        sai_config.pin_config.sb   = Pin(PORTE, 3);
         SaiHandle sai_1_handle;
         sai_1_handle.Init(sai_config);
 
@@ -281,8 +282,8 @@ namespace time_machine
         i2c_cfg.periph         = I2CHandle::Config::Peripheral::I2C_2;
         i2c_cfg.mode           = I2CHandle::Config::Mode::I2C_MASTER;
         i2c_cfg.speed          = I2CHandle::Config::Speed::I2C_400KHZ;
-        i2c_cfg.pin_config.scl = {PORTB, 10};
-        i2c_cfg.pin_config.sda = {PORTB, 11};
+        i2c_cfg.pin_config.scl = Pin(PORTB, 10);
+        i2c_cfg.pin_config.sda = Pin(PORTB, 11);
         I2CHandle i2c2;
         i2c2.Init(i2c_cfg);
         codec.Init(i2c2);
@@ -367,9 +368,11 @@ namespace time_machine
         }
 
         /** Fixed-function Digital I/O */
-        user_led.Init(PIN_USER_LED, GPIO::Mode::OUTPUT);
+
+        user_led.Init(PIN_USER_LED,GPIO::Mode::OUTPUT);
         gate_in_1.Init(B10);
         gate_in_2.Init(B9);
+
 
         /** DAC init */
         pimpl_->InitDac();
