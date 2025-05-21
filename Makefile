@@ -8,6 +8,7 @@ USE_DAISYSP_LGPL=1
 CPP_SOURCES = time_machine_hardware.cpp TimeMachine.cpp
 LDFLAGS = -u _printf_float
 OPT = -Os
+
 # Library Locations
 LIBDAISY_DIR = ../../../libDaisy/
 DAISYSP_DIR = ../../../DaisySP/

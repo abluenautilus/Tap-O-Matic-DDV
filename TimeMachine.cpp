@@ -387,7 +387,6 @@ void logState()
 	hw.PrintLine("DROPPED FRAMES: %d", droppedFrames);
 
 	hw.PrintLine("");
-
 	hw.PrintLine("clock: %s", hw.gate_in_1.State() ? "on" : "off");
 
 	spread.Dump();

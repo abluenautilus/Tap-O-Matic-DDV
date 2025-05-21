@@ -10,7 +10,11 @@ https://docs.google.com/spreadsheets/d/1hPb3Es_wUxIoNBYNVZt8cKr9BfJMghtDLR-cnE-f
 
 ## Front Panel
 
-We are experimenting with PCB and Aluminum panels. 
+All of the files for producing the panels are in the panel folder. We are experimenting with PCB and Aluminum panels. 
 
 ## Build Instructions
-Coming Soon. 
+
+The build guide can be found here: 
+
+https://docs.google.com/document/d/1rPKsOXEx5abdQNxCypnp2nViSWlIubEysEng-fZd7tw/edit?tab=t.0
+
