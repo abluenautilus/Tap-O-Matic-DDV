@@ -10,7 +10,9 @@ https://docs.google.com/spreadsheets/d/1hPb3Es_wUxIoNBYNVZt8cKr9BfJMghtDLR-cnE-f
 
 ## Front Panel
 
-All of the files for producing the panels are in the panel folder. We are experimenting with PCB and Aluminum panels. 
+All of the files for producing the panels are in the panel folder. This panel was fabricated by http://pcbway.com. It's a PCB panel using matte black solder mask:
+
+![image](pictures/front_panel.png.png)
 
 ## Build Instructions
 
