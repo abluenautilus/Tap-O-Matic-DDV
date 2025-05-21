@@ -12,7 +12,7 @@ https://docs.google.com/spreadsheets/d/1hPb3Es_wUxIoNBYNVZt8cKr9BfJMghtDLR-cnE-f
 
 All of the files for producing the panels are in the panel folder. This panel was fabricated by http://pcbway.com. It's a PCB panel using matte black solder mask:
 
-![image](pictures/front_panel.png.png)
+![image](pictures/front_panel.png)
 
 ## Build Instructions
 
