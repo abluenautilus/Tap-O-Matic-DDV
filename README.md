@@ -14,6 +14,13 @@ All of the files for producing the panels are in the panel folder. This panel wa
 
 ![image](pictures/front_panel.png)
 
+## Fabrication Instructions
+
+The fabrication guide can be found here: 
+
+https://docs.google.com/document/d/1D_RPgzVUW2ujZSJS9yKFKmFV2mPIwQp9BS7iKvg6IVI/edit?tab=t.0
+
+
 ## Build Instructions
 
 The build guide can be found here: 
