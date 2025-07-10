@@ -239,7 +239,12 @@ void audioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 	}
 
 	// set time machine dry slider value, feedback, "blur" which is semi-deprecated
-	timeMachine.Set(levels[0].value, feedback.value, feedback.value, highpass.value, lowpass.value, feedbackModeSwitch.Read(), filterPositionSwitch.Read());
+	float leftPan, rightPan;
+	panToVolume(hw.GetPanKnob(0), &leftPan, &rightPan);
+	timeMachine.timeMachineLeft.Set( levels[0].value * leftPan, feedback.value, feedback.value, highpass.value, lowpass.value, feedbackModeSwitch.Read(), filterPositionSwitch.Read());
+	timeMachine.timeMachineRight.Set( levels[0].value * rightPan, feedback.value, feedback.value, highpass.value, lowpass.value, feedbackModeSwitch.Read(), filterPositionSwitch.Read());
+
+	//timeMachine.Set(levels[0].value, feedback.value, feedback.value, highpass.value, lowpass.value, feedbackModeSwitch.Read(), filterPositionSwitch.Read());
 
 	for (int i = 1; i < N_TAPS; i++)
 	{
