@@ -424,7 +424,8 @@ int main(void)
     hw.Init();
 	hw.StartLog();
 
-	hw.SetAudioBlockSize(7); // number of samples handled per callback
+	hw.SetAudioBlockSize(16); // number of samples handled per callback
+
 
 	Pin gatePin = CLOCK;
 	gate.Init(gatePin);

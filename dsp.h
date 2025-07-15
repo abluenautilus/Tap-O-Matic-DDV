@@ -290,7 +290,13 @@ public:
             gainCoef = gainCoef * (1.0 - releaseCoef) + targetGainCoef*releaseCoef;
         }
 
-        return in * gainCoef;
+        //return in gainCoef;
+        // Prevent rare case of output exceeding -1.0 or 1.0 due to smoothing
+        float out = in * gainCoef;
+        // Ensure output is always within [-1.0, 1.0]
+        if(out > 1.0f) out = 1.0f;
+        else if(out < -1.0f) out = -1.0f;
+        return out;
     }
 };
 
