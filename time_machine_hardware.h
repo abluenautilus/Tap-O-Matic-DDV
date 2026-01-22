@@ -2,11 +2,55 @@
 
 #define BODGE false
 
+// Uncomment to enable input noise diagnostics
+// #define NOISE_DIAGNOSTICS
+
 #include "daisy.h"
 #include "daisy_patch_sm.h"
+#include <cmath>
 
 using namespace daisy;
 using namespace patch_sm;
+
+#ifdef NOISE_DIAGNOSTICS
+// Welford's online algorithm for computing running mean and variance
+// Memory-efficient single-pass algorithm with good numerical stability
+class NoiseAnalyzer {
+public:
+    void Reset() {
+        count_ = 0;
+        mean_ = 0.0f;
+        M2_ = 0.0f;
+        minVal_ = 1.0f;
+        maxVal_ = 0.0f;
+    }
+
+    void AddSample(float x) {
+        count_++;
+        float delta = x - mean_;
+        mean_ += delta / count_;
+        float delta2 = x - mean_;
+        M2_ += delta * delta2;
+        if (x < minVal_) minVal_ = x;
+        if (x > maxVal_) maxVal_ = x;
+    }
+
+    float GetMean() const { return mean_; }
+    float GetVariance() const { return count_ > 1 ? M2_ / (count_ - 1) : 0.0f; }
+    float GetStdDev() const { return sqrtf(GetVariance()); }
+    float GetRange() const { return maxVal_ - minVal_; }
+    float GetMin() const { return minVal_; }
+    float GetMax() const { return maxVal_; }
+    int GetCount() const { return count_; }
+
+private:
+    int count_ = 0;
+    float mean_ = 0.0f;
+    float M2_ = 0.0f;
+    float minVal_ = 1.0f;
+    float maxVal_ = 0.0f;
+};
+#endif
 
 #define LED_DRY DaisyPatchSM::D7
 #define LED_1 DaisyPatchSM::D6
@@ -185,6 +229,12 @@ namespace time_machine
         float GetHighpassKnob();
         float GetLowpassKnob();
 
+#ifdef NOISE_DIAGNOSTICS
+        void UpdateNoiseAnalyzers();
+        void ResetNoiseAnalyzers();
+        void LogNoiseStatistics();
+#endif
+
         /** Returns the STM32 port/pin combo for the desired pin (or an invalid pin for HW only pins)
          *
          *  Macros at top of file can be used in place of separate arguments (i.e. GetPin(A4), etc.)
@@ -325,6 +375,18 @@ namespace time_machine
 
         /** Background callback for updating the DACs. */
         Impl* pimpl_;
+
+#ifdef NOISE_DIAGNOSTICS
+        // Noise analyzers for key inputs
+        NoiseAnalyzer timeKnobNoise_;
+        NoiseAnalyzer spreadKnobNoise_;
+        NoiseAnalyzer feedbackKnobNoise_;
+        NoiseAnalyzer lowpassKnobNoise_;
+        NoiseAnalyzer highpassKnobNoise_;
+        NoiseAnalyzer levelSliderNoise_[9];
+        NoiseAnalyzer panKnobNoise_[9];
+        NoiseAnalyzer cvNoise_[6];  // Spread, Time, Feedback, Highpass, Lowpass, LevelDry
+#endif
     };
 
 } // namespace patch_sm

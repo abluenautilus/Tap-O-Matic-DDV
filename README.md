@@ -1,6 +1,6 @@
 # Tap-O-Matic DDV
 
-The Olivia Artz Modular Time Machine, version by Harry Richardson, modified by Blue Nautilus and the DivKid Discord. 
+The Olivia Artz Modular Time Machine, version by Harry Richardson, modified by Blue Nautilus and the DivKid Discord, and finally tweaked heavily by Eris Fairbanks. We've come full circle folks!
 
 This version modifies the [Tap-O-Matic version](https://github.com/cormallen/tap-o-matic) by HR in two ways:
 <ul>
@@ -8,6 +8,13 @@ This version modifies the [Tap-O-Matic version](https://github.com/cormallen/tap
 <li>It moves the power header on the back so that it doesn't interfere with one of the jacks. This means you don't have to shave plastic off the jack.</li>
 </ul>
 
+**Eris's Software Notes:**
+- Read heads are paired in order to utilize the PSRAM cache more effectively.
+- The dynamics management system is drastically improved, utilizing a 4-point lookahead system per read-head pair.
+- Filters used to be one-poles, now they're my own SVF implementation. Steeper cutoff, more resonance, more character.
+- Code is a bit more readable and cleaner I think, constants and twiddle factors gathered up and commented.
+- CPU usage is better, though extreme time variation might still cause frame drops? I haven't seen any, but that doesn't mean they aren't possible. Might be good to bump block size up to 8 if we notice any.
+- Feedback can still distort. Dynamic range still isn't what I'd like it to be and probably never will be unless there's a hardware change to support 20vpp.
 
 ## Front Panel
 
