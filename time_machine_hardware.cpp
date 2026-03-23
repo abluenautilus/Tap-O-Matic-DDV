@@ -513,7 +513,7 @@ namespace time_machine
     float TimeMachineHardware::GetPanKnob(int idx) {
         const int muxMapping[] = {5, 7, 6, 4, 1, 2, 0, 3};
 
-        // The '1.0 - x' bit here is because our pan pots are wired backwards!
+        // The '1.0 - x' bit here is because our pan pots are wired backwards! (maybe?????? IDK I don't trust this)
         if (idx == 0)
         {
             return 1.0 - adc.GetMuxFloat(MISC_MUX, 6);
@@ -662,6 +662,114 @@ namespace time_machine
 
         return fail_cnt == 0;
     }
+
+#ifdef NOISE_DIAGNOSTICS
+    void TimeMachineHardware::UpdateNoiseAnalyzers()
+    {
+        // Main knobs
+        timeKnobNoise_.AddSample(GetTimeKnob());
+        spreadKnobNoise_.AddSample(GetSpreadKnob());
+        feedbackKnobNoise_.AddSample(GetFeedbackKnob());
+        lowpassKnobNoise_.AddSample(GetLowpassKnob());
+        highpassKnobNoise_.AddSample(GetHighpassKnob());
+
+        // Level sliders and pan knobs
+        for (int i = 0; i < 9; i++)
+        {
+            levelSliderNoise_[i].AddSample(GetLevelSlider(i));
+            panKnobNoise_[i].AddSample(GetPanKnob(i));
+        }
+
+        // CV inputs
+        cvNoise_[0].AddSample(GetAdcValue(SPREAD_CV));
+        cvNoise_[1].AddSample(GetAdcValue(TIME_CV));
+        cvNoise_[2].AddSample(GetAdcValue(FEEDBACK_CV));
+        cvNoise_[3].AddSample(GetAdcValue(HIGHPASS_CV));
+        cvNoise_[4].AddSample(GetAdcValue(LOWPASS_CV));
+        cvNoise_[5].AddSample(GetAdcValue(LEVEL_DRY_CV));
+    }
+
+    void TimeMachineHardware::ResetNoiseAnalyzers()
+    {
+        timeKnobNoise_.Reset();
+        spreadKnobNoise_.Reset();
+        feedbackKnobNoise_.Reset();
+        lowpassKnobNoise_.Reset();
+        highpassKnobNoise_.Reset();
+
+        for (int i = 0; i < 9; i++)
+        {
+            levelSliderNoise_[i].Reset();
+            panKnobNoise_[i].Reset();
+        }
+
+        for (int i = 0; i < 6; i++)
+        {
+            cvNoise_[i].Reset();
+        }
+    }
+
+    void TimeMachineHardware::LogNoiseStatistics()
+    {
+        int sampleCount = timeKnobNoise_.GetCount();
+        PrintLine("=== Input Noise Analysis (%d samples) ===", sampleCount);
+
+        PrintLine("Knobs:");
+        PrintLine("  Time:     mean=" FLT_FMT(4) " stddev=" FLT_FMT(5) " range=" FLT_FMT(5),
+            FLT_VAR(4, timeKnobNoise_.GetMean()),
+            FLT_VAR(5, timeKnobNoise_.GetStdDev()),
+            FLT_VAR(5, timeKnobNoise_.GetRange()));
+        PrintLine("  Spread:   mean=" FLT_FMT(4) " stddev=" FLT_FMT(5) " range=" FLT_FMT(5),
+            FLT_VAR(4, spreadKnobNoise_.GetMean()),
+            FLT_VAR(5, spreadKnobNoise_.GetStdDev()),
+            FLT_VAR(5, spreadKnobNoise_.GetRange()));
+        PrintLine("  Feedback: mean=" FLT_FMT(4) " stddev=" FLT_FMT(5) " range=" FLT_FMT(5),
+            FLT_VAR(4, feedbackKnobNoise_.GetMean()),
+            FLT_VAR(5, feedbackKnobNoise_.GetStdDev()),
+            FLT_VAR(5, feedbackKnobNoise_.GetRange()));
+        PrintLine("  Lowpass:  mean=" FLT_FMT(4) " stddev=" FLT_FMT(5) " range=" FLT_FMT(5),
+            FLT_VAR(4, lowpassKnobNoise_.GetMean()),
+            FLT_VAR(5, lowpassKnobNoise_.GetStdDev()),
+            FLT_VAR(5, lowpassKnobNoise_.GetRange()));
+        PrintLine("  Highpass: mean=" FLT_FMT(4) " stddev=" FLT_FMT(5) " range=" FLT_FMT(5),
+            FLT_VAR(4, highpassKnobNoise_.GetMean()),
+            FLT_VAR(5, highpassKnobNoise_.GetStdDev()),
+            FLT_VAR(5, highpassKnobNoise_.GetRange()));
+
+        PrintLine("Sliders:");
+        for (int i = 0; i < 9; i++)
+        {
+            PrintLine("  Level[%d]: mean=" FLT_FMT(4) " stddev=" FLT_FMT(5) " range=" FLT_FMT(5),
+                i,
+                FLT_VAR(4, levelSliderNoise_[i].GetMean()),
+                FLT_VAR(5, levelSliderNoise_[i].GetStdDev()),
+                FLT_VAR(5, levelSliderNoise_[i].GetRange()));
+        }
+
+        PrintLine("Pan Knobs:");
+        for (int i = 0; i < 9; i++)
+        {
+            PrintLine("  Pan[%d]:   mean=" FLT_FMT(4) " stddev=" FLT_FMT(5) " range=" FLT_FMT(5),
+                i,
+                FLT_VAR(4, panKnobNoise_[i].GetMean()),
+                FLT_VAR(5, panKnobNoise_[i].GetStdDev()),
+                FLT_VAR(5, panKnobNoise_[i].GetRange()));
+        }
+
+        const char* cvNames[] = {"Spread", "Time", "Feedback", "Highpass", "Lowpass", "LevelDry"};
+        PrintLine("CVs:");
+        for (int i = 0; i < 6; i++)
+        {
+            PrintLine("  %-8s: mean=" FLT_FMT(4) " stddev=" FLT_FMT(5) " range=" FLT_FMT(5),
+                cvNames[i],
+                FLT_VAR(4, cvNoise_[i].GetMean()),
+                FLT_VAR(5, cvNoise_[i].GetStdDev()),
+                FLT_VAR(5, cvNoise_[i].GetRange()));
+        }
+
+        PrintLine("");
+    }
+#endif
 
 } // namespace patch_sm
 
