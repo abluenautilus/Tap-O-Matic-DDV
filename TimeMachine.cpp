@@ -15,8 +15,8 @@ using namespace std;
 #define CALIBRATION_SAMPLES 100
 #define BUFFER_WIGGLE_ROOM_SAMPLES 1000
 
-#define LOGGING_ENABLED
-#define CPU_DIAGNOSTICS
+// #define LOGGING_ENABLED
+// #define CPU_DIAGNOSTICS
 
 // ------------------- //
 // --- ERIS: TO DO --- //
