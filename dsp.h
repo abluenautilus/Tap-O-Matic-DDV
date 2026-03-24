@@ -5,6 +5,7 @@
 #include "biquad.h"
 #include "constants.h"
 #include "dynamics.h"
+#include "fast_math.h"
 
 #define HALF_PI 1.570796326794897
 
@@ -109,11 +110,11 @@ void panToVolume(float pan, float *left, float *right)
 		// Panning right: reduce right channel, left stays at 1.0
 		float t = (pan - 0.5f) * 2.0f;  // 0 at center, 1 at hard right
 		*left = 1.0f;
-		*right = cosf(t * HALF_PI);      // 1 at center, 0 at hard right
+		*right = fast_cos_pan(t);
 	} else {
 		// Panning left: reduce left channel, right stays at 1.0
 		float t = (0.5f - pan) * 2.0f;  // 0 at center, 1 at hard left
-		*left = cosf(t * HALF_PI);       // 1 at center, 0 at hard left
+		*left = fast_cos_pan(t);
 		*right = 1.0f;
 	}
 }
@@ -704,13 +705,10 @@ public:
         this->isLastTapFeedback = isLastTapFeedback;
         this->isPreFilter = isPreFilter;
 
-        // Exponential frequency mapping: 0-1 knob range maps to 20Hz - 22kHz
-        // This gives musical octave-based scaling (each equal knob increment doubles frequency)
-        float minFreq = 20.0f;
-        float maxFreq = 22000.0f;  // Close to Nyquist (24kHz at 48kHz sample rate)
-        float freqRatio = maxFreq / minFreq;
-        float lowpassHz = minFreq * powf(freqRatio, lowFc);
-        float highpassHz = minFreq * powf(freqRatio, highFc);
+        // Exponential freq mapping: 0-1 knob -> 20Hz-22kHz (log2(22000/20) = 10.103)
+        const float LOG2_FREQ_RATIO = 10.10297f;
+        float lowpassHz  = 20.0f * fast_exp2(lowFc  * LOG2_FREQ_RATIO);
+        float highpassHz = 20.0f * fast_exp2(highFc * LOG2_FREQ_RATIO);
 
         // Set filter frequencies (same for L/R)
         lowpassL.SetCutoff(lowpassHz);

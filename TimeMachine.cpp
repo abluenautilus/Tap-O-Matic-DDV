@@ -1,6 +1,7 @@
 #include "daisy_patch_sm.h"
 #include "daisysp.h"
 #include "dsp.h"
+#include "fast_math.h"
 #include "time_machine_hardware.h"
 #include "constants.h"
 
@@ -14,8 +15,8 @@ using namespace std;
 #define CALIBRATION_SAMPLES 100
 #define BUFFER_WIGGLE_ROOM_SAMPLES 1000
 
-// #define LOGGING_ENABLED
-// #define CPU_DIAGNOSTICS
+#define LOGGING_ENABLED
+#define CPU_DIAGNOSTICS
 
 // ------------------- //
 // --- ERIS: TO DO --- //
@@ -218,7 +219,7 @@ void updateControlHandlers()
 	if (clockRateDetector.GetInterval() > 0.0)
 	{
 		// Quantized steps for clock sync: knob controls octave divisions, CV adds/subtracts octaves
-		float timeCoef = pow(2.0, (timeKnobSchmidt.Process((1.0 - time.knob) * constants::CLOCK_KNOB_STEPS)) + (timeCvSchmidt.Process(time.cv * constants::CLOCK_CV_STEPS))) / constants::CLOCK_CENTER_DIVISOR;
+		float timeCoef = fast_exp2((timeKnobSchmidt.Process((1.0 - time.knob) * constants::CLOCK_KNOB_STEPS)) + (timeCvSchmidt.Process(time.cv * constants::CLOCK_CV_STEPS))) / constants::CLOCK_CENTER_DIVISOR;
 		time.value = clockRateDetector.GetInterval() / timeCoef;
 
 		// make sure time is a power of two less than the max time available in the buffer
@@ -227,7 +228,8 @@ void updateControlHandlers()
 	else
 	{
 		// time quadratic with knob (finer control at short times), scaled v/oct style with CV
-		time.value = pow(time.knobSlew.Process(time.knob), constants::TIME_KNOB_CURVE) * constants::TIME_MAX_SECONDS / pow(2.0, time.cvSlew.Process(time.cv) * constants::TIME_CV_OCTAVE_RANGE);
+		float knob = time.knobSlew.Process(time.knob);
+		time.value = knob * knob * constants::TIME_MAX_SECONDS / fast_exp2(time.cvSlew.Process(time.cv) * constants::TIME_CV_OCTAVE_RANGE);
 	}
 
 	// force time down to a max value (taking whichever is lesser, the max or the time)
@@ -249,18 +251,6 @@ void audioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 
 	// Then we can use those values when updating our handlers.
 	updateControlHandlers();
-
-	// Set LEDs based on loudness for all 9 taps
-	// Tap 0 = dry (input), Taps 1-8 = delay taps
-	if (setLeds)
-	{
-		for (int i = 0; i < N_TAPS; i++)
-		{
-			float loudness = timeMachine.GetTapLoudness(i);
-			leds[i].Set(loudness);
-			leds[i].Update();
-		}
-	}
 
 	// Set global time machine parameters (feedback, filters, modes)
 	timeMachine.Set(feedback.value, highpass.value, lowpass.value, feedbackModeSwitch.Read(), filterPositionSwitch.Read());
@@ -615,7 +605,7 @@ int main(void)
   hw.Init();
 	hw.StartLog();
 
-	hw.SetAudioBlockSize(7); // number of samples handled per callback
+	hw.SetAudioBlockSize(5); // number of samples handled per callback
 
 
 	Pin gatePin = CLOCK;
@@ -718,13 +708,28 @@ int main(void)
 	// that hopefully the noise is less bad????
 	static volatile float fpu_dummy = 1.0f;
 	uint32_t last_log_ms = 0;
+	uint32_t last_led_ms = 0;
 
 	while (true)
 	{
-#ifdef LOGGING_ENABLED
-		// Throttle slow tasks using the millisecond tick instead of blocking delays
 		uint32_t now = System::GetNow();
 
+		// Update LEDs at ~1kHz from the main loop (not the audio interrupt) to
+		// avoid FPU lazy-stacking corruption of the Led::Update() pwm accumulator.
+		if (now - last_led_ms >= 1)
+		{
+			if (setLeds)
+			{
+				for (int i = 0; i < N_TAPS; i++)
+				{
+					leds[i].Set(timeMachine.GetTapLoudness(i));
+					leds[i].Update();
+				}
+			}
+			last_led_ms = now;
+		}
+
+#ifdef LOGGING_ENABLED
 		if (now - last_log_ms >= 500)
 		{
 			logState();
@@ -734,7 +739,6 @@ int main(void)
 
 		// Keep FPU active to level power draw. volatile prevents optimization.
 		// Multiplier kept near 1.0 to avoid NaN/Inf accumulation over time.
-		// I honestly have no idea if this is worthwhile to do but it can't hurt.
 		fpu_dummy = fpu_dummy * 0.99999f + 0.00001f;
 	}
 }
