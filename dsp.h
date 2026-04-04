@@ -1,5 +1,11 @@
+#pragma once
+
+#include "daisy_patch_sm.h"
 #include "daisysp.h"
 #include "biquad.h"
+#include "constants.h"
+#include "dynamics.h"
+#include "fast_math.h"
 
 #define HALF_PI 1.570796326794897
 
@@ -18,12 +24,6 @@ int seconds_to_samples(float x, float sampleRate)
 }
 
 
-float mix(float x, float a, float b)
-{
-    return x*(1-x) + b*x;
-}
-
-
 float clamp(float x, float a, float b)
 {
     return std::max(a,std::min(b,x));
@@ -33,10 +33,10 @@ float clamp(float x, float a, float b)
 float fourPointWarp(float x,
                     float ai=0.0,
                     float av=0.0,
-                    float bi=0.45,
-                    float bv=0.5,
-                    float ci=0.55,
-                    float cv=0.5,
+                    float bi=constants::WARP_POINT_B_IN,
+                    float bv=constants::WARP_POINT_B_OUT,
+                    float ci=constants::WARP_POINT_C_IN,
+                    float cv=constants::WARP_POINT_C_OUT,
                     float di=1.0,
                     float dv=1.0)
 {
@@ -67,7 +67,7 @@ float fourPointWarp(float x,
 }
 
 
-float minMaxKnob(float in, float dz=0.002)
+float minMaxKnob(float in, float dz=constants::DEFAULT_KNOB_DEADZONE)
 {
     in = in - (dz * 0.5);
     in = in * (1.0 + dz);
@@ -80,17 +80,7 @@ float minMaxSlider(float in, float dz=0.002)
     return minMaxKnob(in, dz);
 }
 
-
-float softClip(float x, float kneeStart=0.9, float kneeCurve=5.0)
-{
-    float linPart = clamp(x, -kneeStart, kneeStart);
-    float clipPart = x - linPart;
-    clipPart = atan(clipPart * kneeCurve) /  kneeCurve;
-    return linPart + clipPart;
-}
-
-
-float spreadTaps(float x, float s, float e=2.5)
+float spreadTaps(float x, float s, float e=constants::SPREAD_EXPONENT)
 {
     s = clamp(s, 0.0, 1.0);
     if (s > 0.5)
@@ -110,11 +100,23 @@ float spreadTaps(float x, float s, float e=2.5)
     return x;
 }
 
-
+// This was previously putting both channels at ~0.67 at center, which screws up
+// the noon-unity feedback scaling we need to allow users to "freeze" the delay
 void panToVolume(float pan, float *left, float *right)
 {
-	*right = pow( sin((1 - pan) * HALF_PI) , 1.5);
-	*left = pow( sin(pan * HALF_PI), 1.5);
+	// Balance-style panning: center = both at 1.0
+	// Panning reduces the opposite channel sinusoidally
+	if (pan >= 0.5f) {
+		// Panning right: reduce right channel, left stays at 1.0
+		float t = (pan - 0.5f) * 2.0f;  // 0 at center, 1 at hard right
+		*left = 1.0f;
+		*right = fast_cos_pan(t);
+	} else {
+		// Panning left: reduce left channel, right stays at 1.0
+		float t = (0.5f - pan) * 2.0f;  // 0 at center, 1 at hard left
+		*left = fast_cos_pan(t);
+		*right = 1.0f;
+	}
 }
 
 
@@ -127,7 +129,7 @@ class PreciseSlew
     void Init(float sample_rate, float htime)
     {
         lastVal  = 0;
-        prvhtim_ = -100.0;
+        prvhtim_ = constants::SLEW_COEF_UNINITIALIZED;
         htime_   = htime;
         sample_rate_ = sample_rate;
         onedsr_      = 1.0 / sample_rate_;
@@ -165,13 +167,13 @@ class Slew
 {
 public:
     double lastVal = 0.0;
-    double coef = 0.001;
+    double coef = constants::SLEW_DEFAULT_COEF;
     double noiseFloor = 0.0;
     double noiseCoef = 0.0;
     int settleSamples = 0;
-    int settleSamplesThreshold = 96;
+    int settleSamplesThreshold = constants::SLEW_SETTLE_SAMPLES;
 
-    void Init(double coef = 0.001, double nf = 0.0)
+    void Init(double coef = constants::SLEW_DEFAULT_COEF, double nf = 0.0)
     {
         this->coef = coef;
         this->noiseFloor = nf;
@@ -201,7 +203,7 @@ public:
             }
             else
             {
-                // We're over the noise floor - reset the settle wait time
+                // We're over the noise floor so reset the settle wait time
                 settleSamples = 0;
             }
         }
@@ -212,12 +214,40 @@ public:
 };
 
 
+// Asymmetric slew: different rates for rising vs falling values
+// Useful for dynamics processing where attack and release should differ
+class AsymmetricSlew
+{
+public:
+    float lastVal = 0.0f;
+    float attackCoef = 1.0f;    // Coefficient when value is falling (instant by default)
+    float releaseCoef = 0.001f; // Coefficient when value is rising (slow by default)
+
+    void Init(float attack, float release, float initialVal = 1.0f)
+    {
+        attackCoef = attack;
+        releaseCoef = release;
+        lastVal = initialVal;
+    }
+
+    float Process(float x)
+    {
+        float d = x - lastVal;
+        // Attack = value falling (e.g., gain reduction kicking in)
+        // Release = value rising (e.g., gain returning to normal)
+        float coef = (d < 0.0f) ? attackCoef : releaseCoef;
+        lastVal = lastVal + d * coef;
+        return lastVal;
+    }
+};
+
+
 class ContSchmidt
 {
 public:
     float val = 0.0;
 
-    float Process(float x, float h = 0.333)
+    float Process(float x, float h = constants::SCHMIDT_HYSTERESIS)
     {
         float i, f;
         float sign = x < 0.0 ? -1.0 : 1.0;
@@ -235,7 +265,7 @@ class UltraSlowDCBlocker
 public:
     Slew slew;
 
-    void Init(float coef = 0.00001)
+    void Init(float coef = constants::DC_BLOCKER_COEF)
     {
         slew.Init(coef);
     }
@@ -247,298 +277,684 @@ public:
 };
 
 
+// Asymmetric envelope follower for loudness detection.
+// Fast attack to respond before peaks arrive (when combined with lookahead),
+// slow release to avoid distortion and mainting "memory" of encountered loudness
 class LoudnessDetector
 {
 public:
-    Slew slew;
-    float lastVal = 0;
-
-    void Init() { slew.Init(); }
-    float Get() { return this->lastVal; }
-
-    float Process(float x)
-    {
-        lastVal = slew.Process(abs(x));
-        return x;
-    }
-};
-
-
-class Limiter {
-public:
-    float gainCoef;
-    float attackCoef;
-    float releaseCoef;
+    float envelope = 0.0f;
+    float attackCoef = 0.0f;
+    float releaseCoef = 0.0f;
 
     void Init(float sampleRate)
     {
-        gainCoef = 1;
-        releaseCoef = 16.0 / sampleRate;
+        envelope = 0.0f;
+        // Attack: ~3ms
+        attackCoef = 1.0f - expf(-1000.0f / (constants::LOUDNESS_ATTACK_MS * sampleRate));
+        // Release: ~75ms
+        releaseCoef = 1.0f - expf(-1000.0f / (constants::LOUDNESS_RELEASE_MS * sampleRate));
     }
 
+    float Get() const { return envelope; }
 
-    float Process(float in)
+    // Process current sample and optional lookahead peak
+    // Returns the input unchanged (for chaining), updates internal envelope
+    float Process(float current, float lookaheadPeak = 0.0f)
     {
-        float targetGainCoef = 1.0 / std::max(abs(in), (float)1.0);
+        // Use max of current sample and lookahead peak
+        float peak = fmaxf(fabsf(current), lookaheadPeak);
 
-        if (targetGainCoef < gainCoef)
+        if (peak > envelope)
         {
-            gainCoef = targetGainCoef;
+            // Fast attack
+            envelope += (peak - envelope) * attackCoef;
         }
         else
         {
-            gainCoef = gainCoef * (1.0 - releaseCoef) + targetGainCoef*releaseCoef;
+            // Slow release
+            envelope += (peak - envelope) * releaseCoef;
         }
 
-        //return in gainCoef;
-        // Prevent rare case of output exceeding -1.0 or 1.0 due to smoothing
-        float out = in * gainCoef;
-        // Ensure output is always within [-1.0, 1.0]
-        if(out > 1.0f) out = 1.0f;
-        else if(out < -1.0f) out = -1.0f;
-        return out;
+        return current;
     }
 };
 
-
-class ReadHead
+// StereoTap: Cache-optimized stereo delay tap
+// TODO: re-add blur/jitter
+class StereoTap
 {
 public:
-    LoudnessDetector loudness;
-    float* buffer;
-    int bufferSize;
-    float delayA = 0.0;
-    float delayB = 0.0;
-    float targetDelay = -1;
-    float ampA = 0.0;
-    float ampB = 0.0;
-    float targetAmp = -1;
-	float sampleRate;
-    float phase = 1.0;
-    float delta;
-    float blurAmount;
+    LoudnessDetector loudness;  // For LED display (max of L/R)
+    float sampleRate;
+    int bufferSize;  // Number of stereo pairs (actual buffer is 2x this)
 
-    void Init(float sampleRate, float* buffer, int bufferSize)
+    // Shared timing state (delay is same for L/R)
+    float delayA = 0.0f;
+    float delayB = 0.0f;
+    float targetDelay = -1.0f;
+
+    // Per-channel amplitude for pan
+    float ampL_A = 0.0f;
+    float ampL_B = 0.0f;
+    float targetAmpL = -1.0f;
+
+    float ampR_A = 0.0f;
+    float ampR_B = 0.0f;
+    float targetAmpR = -1.0f;
+
+    // Current effective amplitude (updated each Process call)
+    // Used for ampCoefSum and loudness calculations
+    float currentAmpL = 0.0f;
+    float currentAmpR = 0.0f;
+
+    float phase = 1.0f;
+    float delta;
+    float blurAmount = 0.0f;
+
+    void Init(float sampleRate, int bufferSize)
     {
         this->sampleRate = sampleRate;
-        this->delta = 5.0 / sampleRate;
-        this->buffer = buffer;
         this->bufferSize = bufferSize;
-        this->blurAmount = 0.0;
+        this->delta = constants::CROSSFADE_RATE / sampleRate;
+        loudness.Init(sampleRate);
     }
 
-    void Set(float delay, float amp, float blur = 0)
+    void Set(float delay, float ampL, float ampR, float blur = 0.0f)
     {
         this->targetDelay = delay;
-        this->targetAmp = amp;
+        this->targetAmpL = ampL;
+        this->targetAmpR = ampR;
         this->blurAmount = blur;
     }
 
-    float Process(float writeHeadPosition, float *unamplifiedOut)
+    // Peek ahead in the buffer to predict future output for this tap.
+    float GetLookaheadPeak(float* buffer, int readPos, int writePos)
     {
-        if(phase >= 1.0 && (targetDelay >= 0.0 || targetAmp > 0.0))
+        // How far ahead can we look? Limited by distance to write head.
+        // availableLookahead = distance from read position to write position
+        int availableLookahead = wrap_buffer_index(writePos - readPos, bufferSize);
+
+        // Clamp to our maximum lookahead window and ensure we don't read past write head
+        int lookaheadSamples = std::min(constants::LOOKAHEAD_SAMPLES, availableLookahead - 1);
+
+        if (lookaheadSamples <= 0)
         {
+            // Very short delay or tap at write head, no lookahead possible
+            return 0.0f;
+        }
+
+        // Sample N points across the lookahead window
+        // This gives us a good estimate of the peak while being (hopefully) cache-friendly?
+        float peak = 0.0f;
+        int step = std::max(1, lookaheadSamples / constants::LOOKAHEAD_SAMPLE_POINTS);
+
+        for (int i = step; i <= lookaheadSamples; i += step)
+        {
+            int pos = wrap_buffer_index(readPos + i, bufferSize);
+            // Read both L and R at this position
+            float absL = fabsf(buffer[pos * 2]);
+            float absR = fabsf(buffer[pos * 2 + 1]);
+            float localPeak = fmaxf(absL, absR);
+            if (localPeak > peak) peak = localPeak;
+        }
+
+        return peak;
+    }
+
+    // Process both L/R channels together from interleaved buffer
+    // buffer layout: [L0][R0][L1][R1]... (2 floats per stereo sample)
+    // Returns amplified L/R outputs, also provides unamplified for
+    // feedback (IDK how we want to handle tap8 feedback, it's so weird
+    // and not something that I would have added to Time Machine, though
+    // think I get why)
+    void Process(float* buffer, int writePos,
+                 float* outL, float* outR,
+                 float* unamplifiedL, float* unamplifiedR)
+    {
+        // Check if we need to start a new crossfade
+        if (phase >= 1.0f && (targetDelay >= 0.0f || targetAmpL >= 0.0f || targetAmpR >= 0.0f))
+        {
+            // Shift B values to A
             delayA = delayB;
             delayB = targetDelay;
-            targetDelay = -1.0;
-            ampA = ampB;
-            ampB = targetAmp;
-            targetAmp = -1.0;
-            phase = 0.0;
-            delta = (5.0 + daisy::Random::GetFloat(-blurAmount, blurAmount)) / sampleRate;
+            targetDelay = -1.0f;
+
+            ampL_A = ampL_B;
+            ampL_B = targetAmpL;
+            targetAmpL = -1.0f;
+
+            ampR_A = ampR_B;
+            ampR_B = targetAmpR;
+            targetAmpR = -1.0f;
+
+            phase = 0.0f;
+            delta = (constants::CROSSFADE_RATE + daisy::Random::GetFloat(-blurAmount, blurAmount)) / sampleRate;
         }
 
-        float outputA = this->buffer[wrap_buffer_index(writeHeadPosition - seconds_to_samples(this->delayA, this->sampleRate), bufferSize)];
-        float outputB = this->buffer[wrap_buffer_index(writeHeadPosition - seconds_to_samples(this->delayB, this->sampleRate), bufferSize)];
-        float output = ((1 - phase) * outputA) + (phase * outputB);
-        *unamplifiedOut = output;
+        // Calculate buffer positions for crossfade endpoints
+        // Same position for L/R (they share the delay time)
+        int posA = wrap_buffer_index(writePos - seconds_to_samples(delayA, sampleRate), bufferSize);
+        int posB = wrap_buffer_index(writePos - seconds_to_samples(delayB, sampleRate), bufferSize);
 
-        float outputAmp = ((1 - phase) * ampA) + (phase * ampB);
-        phase = phase <= 1.0 ? phase + delta : 1.0;
+        // Read L/R together
+        // same cache line with interleaved buffer
+        // buffer[pos*2] = Left, buffer[pos*2+1] = Right
+        float rawL_A = buffer[posA * 2];
+        float rawR_A = buffer[posA * 2 + 1];
+        float rawL_B = buffer[posB * 2];
+        float rawR_B = buffer[posB * 2 + 1];
 
-        return loudness.Process(output) * outputAmp;
+        // Crossfade between A and B positions
+        float oneMinusPhase = 1.0f - phase;
+        float rawL = oneMinusPhase * rawL_A + phase * rawL_B;
+        float rawR = oneMinusPhase * rawR_A + phase * rawR_B;
+
+        // Provide unamplified output for feedback path
+        *unamplifiedL = rawL;
+        *unamplifiedR = rawR;
+
+        // Crossfade amplitudes
+        float ampL = oneMinusPhase * ampL_A + phase * ampL_B;
+        float ampR = oneMinusPhase * ampR_A + phase * ampR_B;
+
+        // Store current effective amplitude for external use (ampCoefSum, etc.)
+        currentAmpL = ampL;
+        currentAmpR = ampR;
+
+        // Amplified output
+        *outL = rawL * ampL;
+        *outR = rawR * ampR;
+
+        // Advance phase
+        if (phase < 1.0f) phase += delta;
+        if (phase > 1.0f) phase = 1.0f;
+
+        // Lookahead: peek ahead in buffer to predict future output
+        // Use target delay position (posB) since that's where we're transitioning to
+        float lookaheadPeak = GetLookaheadPeak(buffer, posB, writePos);
+
+        // Track loudness with lookahead for predictive dynamics
+        float maxAmp = fmaxf(ampL, ampR);
+        float scaledCurrent = fmaxf(fabsf(rawL), fabsf(rawR)) * maxAmp;
+        float scaledLookahead = lookaheadPeak * maxAmp;
+        loudness.Process(scaledCurrent, scaledLookahead);
     }
 };
 
 
-class TimeMachine
-{
+//=============================================================================
+// SVF: Clean linear state variable filter
+// Unity gain response, no saturation, well-behaved at all levels
+// Resonance range 0-1 where 1 is just below self-oscillation
+//=============================================================================
+class SVF {
 public:
-    ReadHead readHeads[8];
-    LoudnessDetector loudness;
-	float sampleRate;
-    float* buffer;
-    int bufferSize;
-    int writeHeadPosition;
-    float dryAmp;
-    float feedback;
-    float blur;
-    Slew dryAmpSlew;
-    Slew feedbackSlew;
-    Slew ampCoefSlew;
-    Slew blurSlew;
-    Limiter outputLimiter;
-    Limiter feedbackLimiter;
-    UltraSlowDCBlocker dcblk;
-    UltraSlowDCBlocker fbDcblk;
-    daisysp::Compressor compressor;
-    daisysp::Compressor fbCompressor;
-    Biquad lowpass;
-    Biquad highpass;
-    Biquad fbLowpass;
-    Biquad fbHighpass;
-    bool isLastTapFeedback;
-    bool isPreFilter;
+    float lp = 0.0f;
+    float bp = 0.0f;
+    float hp = 0.0f;
 
-    void Init(float sampleRate, float maxDelay, float* buffer)
-    {
-		this->sampleRate = sampleRate;
-        this->bufferSize = seconds_to_samples(maxDelay, sampleRate);
-        this->buffer = buffer;
-
-        for(int i=0; i<bufferSize; i++) buffer[i] = 0;
-        for(int i=0; i<8; i++) readHeads[i].Init(sampleRate, buffer, bufferSize);
-
-        writeHeadPosition = 0;
-        dryAmpSlew.Init();
-        feedbackSlew.Init(0.01);
-        ampCoefSlew.Init(0.0001);
-        blurSlew.Init();
-        outputLimiter.Init(sampleRate);
-        feedbackLimiter.Init(sampleRate);
-        loudness.Init();
-
-        compressor.Init(sampleRate);
-        compressor.SetAttack(0.02);
-        compressor.SetRelease(0.2);
-        compressor.SetRatio(5.0);
-        compressor.SetThreshold(0.0);
-
-        lowpass.setBiquad(bq_type_lowpass_1p1z, 0.5, 0.01, 0.0);
-        highpass.setBiquad(bq_type_highpass_1p1z, 0.0, 0.6, 0.0);
-
-        fbCompressor.Init(sampleRate);
-        fbCompressor.SetAttack(0.02);
-        fbCompressor.SetRelease(0.2);
-        fbCompressor.SetRatio(5.0);
-        fbCompressor.SetThreshold(0.0);
-
-        fbLowpass.setBiquad(bq_type_lowpass_1p1z, 0.5, 0.01, 0.0);
-        fbHighpass.setBiquad(bq_type_highpass_1p1z, 0.0, 0.6, 0.0);
+    void Init(float sampleRate) {
+        _sampleRate = sampleRate;
+        _nyquist = sampleRate * 0.5f;
+        Reset();
     }
 
-    void Set(float dryAmp, float feedback, float blur, float highFc, float lowFc, bool isLastTapFeedback, bool isPreFilter)
-    {
-        this->dryAmp = dryAmp;
-        this->feedback = feedback;
-        this->blur = blur;
-        this->lowpass.setFc(lowFc);
-        this->highpass.setFc(highFc);
-        this->fbLowpass.setFc(lowFc);
-        this->fbHighpass.setFc(highFc);
-        this->isLastTapFeedback = isLastTapFeedback;
-        this->isPreFilter = isPreFilter;
+    void Reset() {
+        _ic1eq = 0.0f;
+        _ic2eq = 0.0f;
+        lp = bp = hp = 0.0f;
     }
 
-    float Process(float in)
-    {
-        float out = 0.0;
-        float ampCoef = 0.0;
+    void SetCutoff(float freqHz) {
+        _cutoffHz = clamp(freqHz, 20.0f, _nyquist * 0.98f);
+        UpdateCoeffs();
+    }
 
-        for (int i = 0; i < 8; i++)
-        {
-            ampCoef += readHeads[i].targetAmp;
-        }
+    void SetResonance(float res) {
+        // 0-1 range: 0=no resonance, 1=just below self-oscillation
+        _resonance = clamp(res, 0.0f, 1.0f);
+        UpdateCoeffs();
+    }
 
-        ampCoef = ampCoefSlew.Process(1.0 / std::max(1.0f, ampCoef));
+    void SetParams(float freqHz, float res) {
+        _cutoffHz = clamp(freqHz, 20.0f, _nyquist * 0.98f);
+        _resonance = clamp(res, 0.0f, 1.0f);
+        UpdateCoeffs();
+    }
 
-        buffer[writeHeadPosition] = in;
-        loudness.Process(in);
+    void Process(float input) {
+        // Standard SVF topology (Hal Chamberlin / Andrew Simper style)
+        float v3 = input - _ic2eq;
+        float v1 = _a1 * _ic1eq + _a2 * v3;
+        float v2 = _ic2eq + _a2 * _ic1eq + _a3 * v3;
 
-        float lastTapOut;
-        for (int i = 0; i < 8; i++)
-        {
-            out += readHeads[i].Process(writeHeadPosition, &lastTapOut);
-        }
+        // Linear state update (no saturation)
+        _ic1eq = 2.0f * v1 - _ic1eq;
+        _ic2eq = 2.0f * v2 - _ic2eq;
 
-        float fbValue;
+        lp = v2;
+        bp = v1;
+        hp = input - _k * v1 - v2;
+    }
 
-        if (isPreFilter)
-        {
-            out = dcblk.Process(out);
-            out = highpass.process(out);
-            out = lowpass.process(out);
-            out = compressor.Process(out, buffer[writeHeadPosition] + out);
+    float GetCutoff() const { return _cutoffHz; }
+    float GetResonance() const { return _resonance; }
 
-            if (isLastTapFeedback)
-            {
-                // We need to apply separate versions of all the conditioning processes because
-                // we are not copying the whole of out.
-                fbValue = lastTapOut;
-                fbValue = fbDcblk.Process(fbValue);
-                fbValue = fbHighpass.process(fbValue);
-                fbValue = fbLowpass.process(fbValue);
-                fbValue = fbCompressor.Process(fbValue, buffer[writeHeadPosition] + fbValue);
-            }
-            else
-            {
-                fbValue = out;
-            }
-        }
-        else
-        {
-            out = dcblk.Process(out);
-            out = compressor.Process(out, buffer[writeHeadPosition] + out);
+private:
+    float _sampleRate = 48000.0f;
+    float _nyquist = 24000.0f;
 
-            if (isLastTapFeedback)
-            {
-                fbValue = lastTapOut;
-            }
-            else
-            {
-                fbValue = out;
-            }
+    float _ic1eq = 0.0f;
+    float _ic2eq = 0.0f;
 
-            // Then we can condition the feedback value the same way regardless of isLastTapFeedback.
-            fbValue = fbDcblk.Process(fbValue);
-            fbValue = fbHighpass.process(fbValue);
-            fbValue = fbLowpass.process(fbValue);
-            fbValue = fbCompressor.Process(fbValue, buffer[writeHeadPosition] + fbValue);
-        }
+    float _cutoffHz = 1000.0f;
+    float _resonance = 0.0f;
 
-        buffer[writeHeadPosition] = -(feedbackLimiter.Process(buffer[writeHeadPosition] + (fbValue * feedbackSlew.Process(feedback) * ampCoef)));
+    // Precomputed coefficients
+    float _g = 0.0f;
+    float _k = 2.0f;
+    float _a1 = 0.0f;
+    float _a2 = 0.0f;
+    float _a3 = 0.0f;
 
-        out = outputLimiter.Process(out + in * dryAmpSlew.Process(dryAmp));
-        writeHeadPosition = wrap_buffer_index(writeHeadPosition + 1, bufferSize);
+    void UpdateCoeffs() {
+        float normalized = 3.14159265f * _cutoffHz / _sampleRate;
+        _g = fastTan(normalized);
 
-        return out;
+        // k controls resonance: k=2 is no resonance, k=0 is self-oscillation
+        // Map resonance 0-1 to k 2-0.01 (never quite reach 0 to stay stable)
+        _k = 2.0f - _resonance * 1.99f;
+
+        _a1 = 1.0f / (1.0f + _g * (_g + _k));
+        _a2 = _g * _a1;
+        _a3 = _g * _a2;
+    }
+
+    // Fast tan approximation for filter coefficient calculation
+    static float fastTan(float x) {
+        float x2 = x * x;
+        return x * (1.0f + x2 * (0.333333333f + x2 * (0.133333333f + x2 * 0.053968254f)));
     }
 };
 
-
+// First-class stereo implementation of Time Machine. Uses stereo read heads to optimize
+// cache accesses and do efficent lookahead for predictive dynamics adjustment. It's still
+// pretty hard on the CPU and rough with the cache, but we are able to get a lot more out
+// of the Daisy this way. We still need to add "blur" back in, probably with some per-read-head
+// delays and perhaps some allpass filters to add a certain amount of per-read-head jitter
 class StereoTimeMachine
 {
 public:
-    TimeMachine timeMachineLeft;
-    TimeMachine timeMachineRight;
+    // Single interleaved buffer pointer (layout: [L0][R0][L1][R1]...)
+    float* buffer;
+    int bufferSize;  // Number of stereo sample pairs
+    int writePos;
+    float sampleRate;
+
+    // taps[0-7] = delay taps 1-8
+    StereoTap taps[8];
+    float dryAmpL = 0.0f;
+    float dryAmpR = 0.0f;
+
+    // Input loudness detector (for dry LED)
+    LoudnessDetector inputLoudness;
+
+    // Per-channel SVF filters (allows stereo width variation)
+    // Using clean linear SVF for transparent filtering
+    SVF lowpassL, lowpassR;
+    SVF highpassL, highpassR;
+    SVF fbLowpassL, fbLowpassR;
+    SVF fbHighpassL, fbHighpassR;
+
+    // DC blockers
+    UltraSlowDCBlocker fbDcblkL, fbDcblkR;
+
+    // Slew filters for smooth parameter changes
+    Slew feedbackSlew;
+    AsymmetricSlew ampCoefSlew;
+
+    // Parameters
+    float feedback;
+    bool isLastTapFeedback;
+    bool isPreFilter;
+
+    // Dynamics processor for output limiting
+    DynamicsProcessor dynamics;
+
+    // Feedback dynamics tracking (for logging/debugging)
+    float lastUserFeedback = 0.0f;
+    float lastEffectiveFeedback = 0.0f;
+    float lastPredictedPeak = 0.0f;
+    float lastAmpCoef = 1.0f;
+    float lastWetGain = 1.0f;
+
+    // Output min/max tracking (pre-clamp, for verifying dynamics processing)
+    float outputMinL = 0.0f;
+    float outputMaxL = 0.0f;
+    float outputMinR = 0.0f;
+    float outputMaxR = 0.0f;
+
+    // Output buffer
     float outputs[2];
 
-    void Init(float sampleRate, float maxDelay, float* bufferLeft, float* bufferRight)
+    void Init(float sampleRate, float maxDelay, float* interleavedBuffer)
     {
-        timeMachineLeft.Init(sampleRate, maxDelay, bufferLeft);
-        timeMachineRight.Init(sampleRate, maxDelay, bufferRight);
+        this->sampleRate = sampleRate;
+        this->bufferSize = seconds_to_samples(maxDelay, sampleRate);
+        this->buffer = interleavedBuffer;
+        this->writePos = 0;
+
+        // Clear interleaved buffer (2 floats per stereo sample)
+        for (int i = 0; i < bufferSize * 2; i++)
+        {
+            buffer[i] = 0.0f;
+        }
+
+        for (int i = 0; i < 8; i++)
+        {
+            taps[i].Init(sampleRate, bufferSize);
+        }
+
+        // Initialize loudness detector for input/dry LED
+        inputLoudness.Init(sampleRate);
+
+        // Initialize SVF filters
+        lowpassL.Init(sampleRate);
+        lowpassR.Init(sampleRate);
+        highpassL.Init(sampleRate);
+        highpassR.Init(sampleRate);
+
+        fbLowpassL.Init(sampleRate);
+        fbLowpassR.Init(sampleRate);
+        fbHighpassL.Init(sampleRate);
+        fbHighpassR.Init(sampleRate);
+
+        // Set initial filter parameters (will be updated by Set())
+        // Resonance adds tighter rolloff without obvious peaking
+        lowpassL.SetParams(20000.0f, constants::FILTER_RESONANCE);
+        lowpassR.SetParams(20000.0f, constants::FILTER_RESONANCE);
+        highpassL.SetParams(20.0f, constants::FILTER_RESONANCE);
+        highpassR.SetParams(20.0f, constants::FILTER_RESONANCE);
+
+        fbLowpassL.SetParams(20000.0f, constants::FILTER_RESONANCE);
+        fbLowpassR.SetParams(20000.0f, constants::FILTER_RESONANCE);
+        fbHighpassL.SetParams(20.0f, constants::FILTER_RESONANCE);
+        fbHighpassR.SetParams(20.0f, constants::FILTER_RESONANCE);
+
+        // Initialize DC blockers
+        fbDcblkL.Init();
+        fbDcblkR.Init();
+
+        // Initialize slews
+        feedbackSlew.Init(constants::SLEW_FEEDBACK_COEF);
+        ampCoefSlew.Init(constants::SLEW_AMP_ATTACK, constants::SLEW_AMP_RELEASE);
+
+        // Initialize dynamics
+        dynamics.Init(sampleRate);
+
+        // Default parameters
+        feedback = 0.0f;
+        isLastTapFeedback = false;
+        isPreFilter = false;
     }
 
-    void Set(float dryAmp, float feedback, float blur, float highFc, float lowFc, bool isLastTapFeedback, bool isPreFilter)
+    // Set global parameters (called once per block, not per tap)
+    void Set(float feedback, float highFc, float lowFc, bool isLastTapFeedback, bool isPreFilter)
     {
-        timeMachineLeft.Set(dryAmp, feedback, blur, highFc, lowFc, isLastTapFeedback, isPreFilter);
-        timeMachineRight.Set(dryAmp, feedback, blur, highFc, lowFc, isLastTapFeedback, isPreFilter);
+        this->feedback = feedback;
+        this->isLastTapFeedback = isLastTapFeedback;
+        this->isPreFilter = isPreFilter;
+
+        // Exponential freq mapping: 0-1 knob -> 20Hz-22kHz (log2(22000/20) = 10.103)
+        const float LOG2_FREQ_RATIO = 10.10297f;
+        float lowpassHz  = 20.0f * fast_exp2(lowFc  * LOG2_FREQ_RATIO);
+        float highpassHz = 20.0f * fast_exp2(highFc * LOG2_FREQ_RATIO);
+
+        // Set filter frequencies (same for L/R)
+        lowpassL.SetCutoff(lowpassHz);
+        lowpassR.SetCutoff(lowpassHz);
+        highpassL.SetCutoff(highpassHz);
+        highpassR.SetCutoff(highpassHz);
+        fbLowpassL.SetCutoff(lowpassHz);
+        fbLowpassR.SetCutoff(lowpassHz);
+        fbHighpassL.SetCutoff(highpassHz);
+        fbHighpassR.SetCutoff(highpassHz);
+    }
+
+    void SetDryTap(float ampL, float ampR)
+    {
+        dryAmpL = ampL;
+        dryAmpR = ampR;
+    }
+
+    // Set delay tap (tapIndex 1-8, maps to taps[0-7])
+    void SetDelayTap(int tapIndex, float delay, float ampL, float ampR, float blur)
+    {
+        if (tapIndex >= 1 && tapIndex <= 8)
+        {
+            taps[tapIndex - 1].Set(delay, ampL, ampR, blur);
+        }
+    }
+
+    // tap 0 = dry (input loudness), taps 1-8 = delay tap loudness
+    float GetTapLoudness(int tapIndex)
+    {
+        if (tapIndex == 0)
+        {
+            return inputLoudness.Get();
+        }
+        if (tapIndex >= 1 && tapIndex <= 8)
+        {
+            return taps[tapIndex - 1].loudness.Get();
+        }
+        return 0.0f;
+    }
+
+    float GetMaxPredictedLoudness()
+    {
+        float maxLoudness = 0.0f;
+        for (int i = 0; i < 8; i++)
+        {
+            float tapLoudness = taps[i].loudness.Get();
+            if (tapLoudness > maxLoudness) maxLoudness = tapLoudness;
+        }
+        return maxLoudness;
+    }
+
+    // Get dynamics info for logging/debugging
+    // Returns: userFeedback, effectiveFeedback, predictedPeak, ampCoef, wetGain
+    void GetDynamicsInfo(float* userFb, float* effectiveFb, float* peak, float* ampCoef, float* wetGain)
+    {
+        *userFb = lastUserFeedback;
+        *effectiveFb = lastEffectiveFeedback;
+        *peak = lastPredictedPeak;
+        *ampCoef = lastAmpCoef;
+        *wetGain = lastWetGain;
+    }
+
+    // Get output min/max (pre-clamp values) for verifying dynamics processing
+    // Values > 1.0 or < -1.0 indicate clipping would occur without dynamics
+    void GetOutputMinMax(float* minL, float* maxL, float* minR, float* maxR)
+    {
+        *minL = outputMinL;
+        *maxL = outputMaxL;
+        *minR = outputMinR;
+        *maxR = outputMaxR;
+    }
+
+    // Reset output min/max tracking (call periodically to get fresh readings)
+    void ResetOutputMinMax()
+    {
+        outputMinL = 0.0f;
+        outputMaxL = 0.0f;
+        outputMinR = 0.0f;
+        outputMaxR = 0.0f;
     }
 
     float* Process(float inLeft, float inRight)
     {
-        outputs[0] = timeMachineLeft.Process(inLeft);
-        outputs[1] = timeMachineRight.Process(inRight);
+        // === 1. Write input to interleaved buffer ===
+        buffer[writePos * 2] = inLeft;
+        buffer[writePos * 2 + 1] = inRight;
+
+        // Track input loudness for dry LED
+        inputLoudness.Process(fmaxf(fabsf(inLeft), fabsf(inRight)));
+
+        // === 2. Process dry tap (direct multiply, no PSRAM read needed) ===
+        float dryL = inLeft  * dryAmpL;
+        float dryR = inRight * dryAmpR;
+
+        float actualDryPeak = fmaxf(fabsf(dryL), fabsf(dryR));
+        dynamics.ProcessDryInput(actualDryPeak);
+
+        // === 3. Process all delay taps (taps 1-8), sum wet signal ===
+        float wetL = 0.0f;
+        float wetR = 0.0f;
+        float lastTapL = 0.0f;
+        float lastTapR = 0.0f;
+        float ampCoefSum = 0.0f;
+
+        for (int i = 0; i < 8; i++)
+        {
+            float tapL, tapR, rawL, rawR;
+            taps[i].Process(buffer, writePos, &tapL, &tapR, &rawL, &rawR);
+            wetL += tapL;
+            wetR += tapR;
+
+            // Keep track of last tap for feedback
+            if (i == 7)
+            {
+                lastTapL = rawL;
+                lastTapR = rawR;
+            }
+
+            // Sum current amplitudes for amp coefficient (pan * level, interpolated during crossfade)
+            ampCoefSum += taps[i].currentAmpL + taps[i].currentAmpR;
+        }
+
+        // Calculate amplitude coefficient to prevent sum from exceeding reasonable levels
+        float ampCoef = ampCoefSlew.Process(1.0f / std::max(1.0f, ampCoefSum * 0.5f));
+
+        // === 4. Apply filters and calculate feedback ===
+        float fbL, fbR;
+
+        if (isPreFilter)
+        {
+            // Highpass then lowpass on wet signal
+            highpassL.Process(wetL);
+            highpassR.Process(wetR);
+            wetL = highpassL.hp;
+            wetR = highpassR.hp;
+
+            lowpassL.Process(wetL);
+            lowpassR.Process(wetR);
+            wetL = lowpassL.lp;
+            wetR = lowpassR.lp;
+
+            if (isLastTapFeedback)
+            {
+                // Separate filtering for last tap feedback
+                fbL = fbDcblkL.Process(lastTapL);
+                fbR = fbDcblkR.Process(lastTapR);
+
+                fbHighpassL.Process(fbL);
+                fbHighpassR.Process(fbR);
+                fbL = fbHighpassL.hp;
+                fbR = fbHighpassR.hp;
+
+                fbLowpassL.Process(fbL);
+                fbLowpassR.Process(fbR);
+                fbL = fbLowpassL.lp;
+                fbR = fbLowpassR.lp;
+            }
+            else
+            {
+                fbL = wetL;
+                fbR = wetR;
+            }
+        }
+        else
+        {
+            if (isLastTapFeedback)
+            {
+                fbL = lastTapL;
+                fbR = lastTapR;
+            }
+            else
+            {
+                fbL = wetL;
+                fbR = wetR;
+            }
+
+            // Filter the feedback path
+            fbL = fbDcblkL.Process(fbL);
+            fbR = fbDcblkR.Process(fbR);
+
+            fbHighpassL.Process(fbL);
+            fbHighpassR.Process(fbR);
+            fbL = fbHighpassL.hp;
+            fbR = fbHighpassR.hp;
+
+            fbLowpassL.Process(fbL);
+            fbLowpassR.Process(fbR);
+            fbL = fbLowpassL.lp;
+            fbR = fbLowpassR.lp;
+        }
+
+        // === 5. Apply feedback with dynamic ceiling ===
+        float predictedPeak = GetMaxPredictedLoudness();
+        float userFeedback = feedbackSlew.Process(feedback);
+
+        float effectiveFeedback;
+        if (predictedPeak > 0.001f)
+        {
+            float feedbackCeiling = constants::FB_TARGET_LEVEL / predictedPeak;
+            effectiveFeedback = std::min(userFeedback, feedbackCeiling);
+        }
+        else
+        {
+            effectiveFeedback = userFeedback;
+        }
+
+        float fbGain = effectiveFeedback * ampCoef;
+
+        // Track for logging
+        lastUserFeedback = userFeedback;
+        lastEffectiveFeedback = effectiveFeedback;
+        lastPredictedPeak = predictedPeak;
+
+        // Write feedback back to buffer (phase inverted)
+        buffer[writePos * 2] = -(buffer[writePos * 2] + fbL * fbGain);
+        buffer[writePos * 2 + 1] = -(buffer[writePos * 2 + 1] + fbR * fbGain);
+
+        // Advance write position
+        writePos = wrap_buffer_index(writePos + 1, bufferSize);
+
+        // Final wet gain step
+        float wetPeak = fmaxf(fabsf(wetL), fabsf(wetR));
+        float gain = dynamics.GetWetGain(wetPeak);
+
+        // Track for logging
+        lastAmpCoef = ampCoef;
+        lastWetGain = gain;
+
+        wetL *= gain;
+        wetR *= gain;
+
+        // Final output: wet + dry
+        float outL = wetL + dryL;
+        float outR = wetR + dryR;
+
+        // Track min/max before clamping (for verifying dynamics processing)
+        if (outL < outputMinL) outputMinL = outL;
+        if (outL > outputMaxL) outputMaxL = outL;
+        if (outR < outputMinR) outputMinR = outR;
+        if (outR > outputMaxR) outputMaxR = outR;
+
+        outputs[0] = clamp(outL, -1.0f, 1.0f);
+        outputs[1] = clamp(outR, -1.0f, 1.0f);
+
         return outputs;
     }
 };
@@ -598,3 +1014,4 @@ public:
         lastVal = triggered;
     }
 };
+
