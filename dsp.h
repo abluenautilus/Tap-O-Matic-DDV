@@ -5,6 +5,7 @@
 #include "biquad.h"
 #include "constants.h"
 #include "dynamics.h"
+#include "fast_math.h"
 
 #define HALF_PI 1.570796326794897
 
@@ -109,11 +110,11 @@ void panToVolume(float pan, float *left, float *right)
 		// Panning right: reduce right channel, left stays at 1.0
 		float t = (pan - 0.5f) * 2.0f;  // 0 at center, 1 at hard right
 		*left = 1.0f;
-		*right = cosf(t * HALF_PI);      // 1 at center, 0 at hard right
+		*right = fast_cos_pan(t);
 	} else {
 		// Panning left: reduce left channel, right stays at 1.0
 		float t = (0.5f - pan) * 2.0f;  // 0 at center, 1 at hard left
-		*left = cosf(t * HALF_PI);       // 1 at center, 0 at hard left
+		*left = fast_cos_pan(t);
 		*right = 1.0f;
 	}
 }
@@ -591,8 +592,10 @@ public:
     int writePos;
     float sampleRate;
 
-    // 9 StereoTaps: tap[0] = dry, tap[1-8] = delay taps
-    StereoTap taps[9];
+    // taps[0-7] = delay taps 1-8
+    StereoTap taps[8];
+    float dryAmpL = 0.0f;
+    float dryAmpR = 0.0f;
 
     // Input loudness detector (for dry LED)
     LoudnessDetector inputLoudness;
@@ -648,8 +651,7 @@ public:
             buffer[i] = 0.0f;
         }
 
-        // Initialize all 9 taps
-        for (int i = 0; i < 9; i++)
+        for (int i = 0; i < 8; i++)
         {
             taps[i].Init(sampleRate, bufferSize);
         }
@@ -704,13 +706,10 @@ public:
         this->isLastTapFeedback = isLastTapFeedback;
         this->isPreFilter = isPreFilter;
 
-        // Exponential frequency mapping: 0-1 knob range maps to 20Hz - 22kHz
-        // This gives musical octave-based scaling (each equal knob increment doubles frequency)
-        float minFreq = 20.0f;
-        float maxFreq = 22000.0f;  // Close to Nyquist (24kHz at 48kHz sample rate)
-        float freqRatio = maxFreq / minFreq;
-        float lowpassHz = minFreq * powf(freqRatio, lowFc);
-        float highpassHz = minFreq * powf(freqRatio, highFc);
+        // Exponential freq mapping: 0-1 knob -> 20Hz-22kHz (log2(22000/20) = 10.103)
+        const float LOG2_FREQ_RATIO = 10.10297f;
+        float lowpassHz  = 20.0f * fast_exp2(lowFc  * LOG2_FREQ_RATIO);
+        float highpassHz = 20.0f * fast_exp2(highFc * LOG2_FREQ_RATIO);
 
         // Set filter frequencies (same for L/R)
         lowpassL.SetCutoff(lowpassHz);
@@ -723,22 +722,21 @@ public:
         fbHighpassR.SetCutoff(highpassHz);
     }
 
-    // Set dry tap (tap 0)
     void SetDryTap(float ampL, float ampR)
     {
-        taps[0].Set(0.0f, ampL, ampR, 0.0f);
+        dryAmpL = ampL;
+        dryAmpR = ampR;
     }
 
-    // Set delay tap (taps 1-8)
+    // Set delay tap (tapIndex 1-8, maps to taps[0-7])
     void SetDelayTap(int tapIndex, float delay, float ampL, float ampR, float blur)
     {
         if (tapIndex >= 1 && tapIndex <= 8)
         {
-            taps[tapIndex].Set(delay, ampL, ampR, blur);
+            taps[tapIndex - 1].Set(delay, ampL, ampR, blur);
         }
     }
 
-    // Get loudness for LED display
     // tap 0 = dry (input loudness), taps 1-8 = delay tap loudness
     float GetTapLoudness(int tapIndex)
     {
@@ -748,16 +746,15 @@ public:
         }
         if (tapIndex >= 1 && tapIndex <= 8)
         {
-            return taps[tapIndex].loudness.Get();
+            return taps[tapIndex - 1].loudness.Get();
         }
         return 0.0f;
     }
 
-    // Get the maximum predicted loudness across all delay taps (for feedback ceiling)
     float GetMaxPredictedLoudness()
     {
         float maxLoudness = 0.0f;
-        for (int i = 1; i <= 8; i++)
+        for (int i = 0; i < 8; i++)
         {
             float tapLoudness = taps[i].loudness.Get();
             if (tapLoudness > maxLoudness) maxLoudness = tapLoudness;
@@ -804,11 +801,10 @@ public:
         // Track input loudness for dry LED
         inputLoudness.Process(fmaxf(fabsf(inLeft), fabsf(inRight)));
 
-        // === 2. Process dry tap (tap 0) ===
-        float dryL, dryR, dryRawL, dryRawR;
-        taps[0].Process(buffer, writePos, &dryL, &dryR, &dryRawL, &dryRawR);
+        // === 2. Process dry tap (direct multiply, no PSRAM read needed) ===
+        float dryL = inLeft  * dryAmpL;
+        float dryR = inRight * dryAmpR;
 
-        // Process dry envelope for ducking
         float actualDryPeak = fmaxf(fabsf(dryL), fabsf(dryR));
         dynamics.ProcessDryInput(actualDryPeak);
 
@@ -819,7 +815,7 @@ public:
         float lastTapR = 0.0f;
         float ampCoefSum = 0.0f;
 
-        for (int i = 1; i <= 8; i++)
+        for (int i = 0; i < 8; i++)
         {
             float tapL, tapR, rawL, rawR;
             taps[i].Process(buffer, writePos, &tapL, &tapR, &rawL, &rawR);
@@ -827,7 +823,7 @@ public:
             wetR += tapR;
 
             // Keep track of last tap for feedback
-            if (i == 8)
+            if (i == 7)
             {
                 lastTapL = rawL;
                 lastTapR = rawR;
